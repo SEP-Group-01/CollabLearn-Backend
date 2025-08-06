@@ -12,7 +12,7 @@
 // }
 
 // apps/auth-service/src/auth.controller.ts
-import { Controller } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto, GoogleLoginDto } from './dto/auth.dto';
@@ -57,5 +57,10 @@ export class AuthController {
   @MessagePattern({ cmd: 'validate_user' })
   async validateUser(@Payload() data: { userId: string }) {
     return this.authService.validateUser(data.userId);
+  }
+
+  @Get()
+  getHello(): string {
+    return this.authService.getHello();
   }
 }
