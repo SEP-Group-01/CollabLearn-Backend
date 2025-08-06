@@ -195,4 +195,8 @@ export class AuthService {
   async validateUser(userId: string): Promise<User | null> { //methana awlk ynn puluwn null return karla
     return this.userService.findUserById(userId);
   }
+
+  getHello(): string {
+    return 'Hello World!';
+  }
 }
