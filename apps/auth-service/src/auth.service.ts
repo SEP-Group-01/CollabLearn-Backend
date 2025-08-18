@@ -33,10 +33,10 @@ export class AuthService {
     );
   }
 
-  async register(registerDto: RegisterDto) {
+  async sign_up(registerDto: RegisterDto) {
     const user = await this.userService.createUser({
       email: registerDto.email,
-      password_hash: registerDto.password,
+      password_hash: registerDto.password, // This should be hashed in the UserService (Not yet hashed even though we call it password hash)
       first_name: registerDto.first_name,
       last_name: registerDto.last_name,
     });
@@ -57,13 +57,15 @@ export class AuthService {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
-        email_verified: user.email_verified,
+        email_verified: user.email_verified, // This will be false until the user verifies their email
       },
     };
   }
 
   async login(loginDto: LoginDto) {
     const user = await this.userService.findUserByEmail(loginDto.email);
+
+    console.log('User:', user); // Log the user found for debugging
     
     if (!user || !user.password_hash) {
       throw new UnauthorizedException('Invalid credentials');

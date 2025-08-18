@@ -30,9 +30,9 @@ export class UserService {
 
     // Generate email verification token
     userData.email_verification_token = crypto.randomBytes(32).toString('hex');
-    userData.email_verified = false;
-    userData.created_at = new Date();
-    userData.updated_at = new Date();
+    // userData.email_verified = false;
+    // userData.created_at = new Date();
+    // userData.updated_at = new Date();
 
     const { data, error } = await supabase
       .from('users')
