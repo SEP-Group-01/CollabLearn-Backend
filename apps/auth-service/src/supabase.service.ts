@@ -1,4 +1,5 @@
 // apps/auth-service/src/supabase.service.ts
+// This implementstion should check for optimization if connection ehhaustment happens
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';

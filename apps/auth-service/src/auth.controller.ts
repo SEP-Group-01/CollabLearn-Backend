@@ -21,13 +21,14 @@ import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto, GoogleLogin
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @MessagePattern({ cmd: 'register' })
-  async register(@Payload() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  @MessagePattern({ cmd: 'sign_up' })
+  async sign_up(@Payload() registerDto: RegisterDto) {
+    return this.authService.sign_up(registerDto);
   }
 
   @MessagePattern({ cmd: 'login' })
   async login(@Payload() loginDto: LoginDto) {
+    console.log('Login attempt:', loginDto); // Log the login attempt for debugging
     return this.authService.login(loginDto);
   }
 
