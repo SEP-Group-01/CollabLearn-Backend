@@ -27,7 +27,7 @@ export class AuthController {
         // converts the first emitted value from that stream into a Promise. then it can be safely awaited.
     }
 
-    @Post('sign_up')
+    @Post('signup')
     async signUp(
         @Body()
         body: {
@@ -67,8 +67,8 @@ export class AuthController {
 
     @Post('reset-password')
     async resetPassword(
-        @Body('token') token: string,
-        @Body('newPassword') newPassword: string
+        @Query('token') token: string,
+        @Body() { newPassword }: { newPassword: string }
     ) {
         if (!token || !newPassword) {
             return { message: 'Token and new password are required!' };
