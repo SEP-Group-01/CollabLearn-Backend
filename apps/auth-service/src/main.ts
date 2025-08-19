@@ -28,6 +28,6 @@ async function bootstrap() {
   
   await app.listen();
   logger.log('Auth Service is running');
-  logger.log('Auth Service is listening on port 300');
+  logger.log('Auth Service is listening on port 3001');
 }
 bootstrap();
