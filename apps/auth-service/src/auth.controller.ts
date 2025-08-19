@@ -51,7 +51,7 @@ export class AuthController {
   async resetPassword(@Payload() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(
       resetPasswordDto.token,
-      resetPasswordDto.new_password,
+      resetPasswordDto.newPassword,
     );
   }
 
