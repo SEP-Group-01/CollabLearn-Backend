@@ -1,4 +1,4 @@
-import { Controller, Inject, Post, Get, Query, Body} from '@nestjs/common';
+import { Controller, Inject, Post, Get, Query, Body, HttpException, HttpStatus} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 
@@ -23,8 +23,13 @@ export class AuthController {
     ) {
         console.log('Login attempt:', body);
         // Implement login logic here
-        return await firstValueFrom(this.authService.send({ cmd: 'login' }, body)); //can't await does not return a Promise, it returns an RxJS Observable.
-        // converts the first emitted value from that stream into a Promise. then it can be safely awaited.
+        
+        try {
+            return await firstValueFrom(this.authService.send({ cmd: 'login' }, body)); //can't await does not return a Promise, it returns an RxJS Observable.
+            // converts the first emitted value from that stream into a Promise. then it can be safely awaited.  
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @Post('signup')
@@ -38,7 +43,11 @@ export class AuthController {
         }
     ) {
         console.log('Sign up attempt:', body);
-        return await firstValueFrom(this.authService.send({ cmd: 'sign_up' }, body));
+        try {
+            return await firstValueFrom(this.authService.send({ cmd: 'sign_up' }, body));
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @Get('verify-email')
@@ -50,7 +59,11 @@ export class AuthController {
         }
 
         console.log('Email verification attempt:', token);
-        return await firstValueFrom(this.authService.send({ cmd: 'verify_email' }, { token }));
+        try {
+            return await firstValueFrom(this.authService.send({ cmd: 'verify_email' }, { token }));
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @Post('forgot-password')
@@ -62,7 +75,11 @@ export class AuthController {
         }
 
         console.log('Forgot password attempt:', email);
-        return await firstValueFrom(this.authService.send({ cmd: 'forgot_password' }, { email }));
+        try {
+            return await firstValueFrom(this.authService.send({ cmd: 'forgot_password' }, { email }));
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @Post('reset-password')
@@ -75,6 +92,10 @@ export class AuthController {
         }
 
         console.log('Reset password attempt:', { token, newPassword });
-        return await firstValueFrom(this.authService.send({ cmd: 'reset_password' }, { token, newPassword }));
+        try {
+            return await firstValueFrom(this.authService.send({ cmd: 'reset_password' }, { token, newPassword }));
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 }
