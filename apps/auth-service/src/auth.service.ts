@@ -61,7 +61,7 @@ export class AuthService {
     
     if (!user || !user.password_hash) {
       // throw new UnauthorizedException('Invalid credentials');
-      throw new RpcException({ status: 401, message: 'Invalid credentials' });
+      throw new RpcException({ status: 401, message: 'User not found' });
     }
 
     const isPasswordValid = await this.userService.verifyPassword(
