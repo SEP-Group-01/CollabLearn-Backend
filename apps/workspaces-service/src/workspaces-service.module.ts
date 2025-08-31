@@ -1,10 +1,19 @@
 import { Module } from '@nestjs/common';
-import { WorkspacesServiceController } from './workspaces-service.controller';
-import { WorkspacesServiceService } from './workspaces-service.service';
+import { ConfigModule } from '@nestjs/config';
+import { WorkspacesController } from './workspaces-service.controller';
+import { WorkspacesService } from './workspaces.service';
+import { SupabaseService } from './supabase.service';
 
 @Module({
-  imports: [],
-  controllers: [WorkspacesServiceController],
-  providers: [WorkspacesServiceService],
+  imports: [
+        ConfigModule.forRoot({ // Load environment variables
+          isGlobal: true,      // Make env accessible globally without importing again
+        }),
+  ],
+  controllers: [WorkspacesController],
+  providers: [
+    WorkspacesService,
+    SupabaseService,
+  ],
 })
 export class WorkspacesServiceModule {}
