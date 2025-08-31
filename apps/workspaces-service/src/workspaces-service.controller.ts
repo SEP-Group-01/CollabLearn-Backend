@@ -1,12 +1,50 @@
-import { Controller, Get } from '@nestjs/common';
-import { WorkspacesServiceService } from './workspaces-service.service';
+import { Controller, UseFilters, Get } from '@nestjs/common';
+import { WorkspacesService } from './workspaces.service';
+import { AllExceptionsFilter } from './all-exceptions.filter';
+import { MessagePattern } from '@nestjs/microservices';
 
 @Controller()
-export class WorkspacesServiceController {
-  constructor(private readonly workspacesServiceService: WorkspacesServiceService) {}
+@UseFilters(AllExceptionsFilter)
+export class WorkspacesController {
+  constructor(private readonly workspacesService: WorkspacesService) {}
 
-  @Get()
-  getHello(): string {
-    return this.workspacesServiceService.getHello();
+  @MessagePattern({ cmd: 'get-workspace-by-id' })
+  getWorkspaceById(data: { id: string }) {
+    return this.workspacesService.getWorkspaceById(data.id);
+  }
+
+  @MessagePattern({ cmd: 'get-workspaces-by-user-id' })
+  getWorkspacesByUserId(data: { userId: string }) {
+    return this.workspacesService.getWorkspacesByUserId(data.userId);
+  }
+
+  @MessagePattern({ cmd: 'get-workspaces-by-search-term' })
+  getWorkspacesBySearchTerm(data: { searchTerm: string }) {
+    return this.workspacesService.getWorkspacesBySearchTerm(data.searchTerm);
+  }
+
+  @MessagePattern({ cmd: 'create-workspace' })
+  createWorkspace(data) {
+    return this.workspacesService.createWorkspace(data);
+  }
+
+  @MessagePattern({ cmd: 'update-workspace' })
+  updateWorkspace(data) {
+    return this.workspacesService.updateWorkspace(data);
+  }
+
+  @MessagePattern({ cmd: 'get-hello' })
+  getHello() {
+    return this.workspacesService.getHello();
+  }
+
+  @MessagePattern({ cmd: 'join-workspace' })
+  joinWorkspace(data: { userId: string; workspaceId: string }) {
+    return this.workspacesService.joinWorkspace(data.userId, data.workspaceId);
+  }
+
+  @MessagePattern({ cmd: 'request-workspace' })
+  requestWorkspace(data: { userId: string; workspaceId: string }) {
+    return this.workspacesService.requestWorkspace(data.userId, data.workspaceId);
   }
 }
