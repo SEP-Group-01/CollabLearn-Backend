@@ -1,23 +1,14 @@
-// import { Controller, Get } from '@nestjs/common';
-// import { AppService } from './auth.service';
-
-// @Controller()
-// export class AppController {
-//   constructor(private readonly appService: AppService) {}
-
-//   @Get()
-//   getHello(): string {
-//     return this.appService.getHello();
-//   }
-// }
-
-// apps/auth-service/src/auth.controller.ts
-import { Controller, Get } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { Controller, UseFilters, Get } from '@nestjs/common';
+import { MessagePattern, Payload, RpcException} from '@nestjs/microservices';
+// import { throwError } from 'rxjs';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto, GoogleLoginDto } from './dto/auth.dto';
+import { AllExceptionsFilter } from './all-exceptions.filter';
+
+
 
 @Controller()
+@UseFilters(AllExceptionsFilter)
 export class AuthController {
   constructor(private authService: AuthService) {}
 

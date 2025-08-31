@@ -1,13 +1,3 @@
-// import { Injectable } from '@nestjs/common';
-
-// @Injectable()
-// export class AppService {
-//   getHello(): string {
-//     return 'Hello World!';
-//   }
-// }
-
-// apps/auth-service/src/auth.service.ts
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from './user.service';
@@ -16,6 +6,7 @@ import { RegisterDto, LoginDto, GoogleLoginDto } from './dto/auth.dto';
 import { User } from './entities/user.entity';
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
+import { RpcException } from '@nestjs/microservices';
 
 @Injectable()
 export class AuthService {
@@ -43,7 +34,8 @@ export class AuthService {
 
     // Send email verification
     if (!user.email_verification_token) {
-      throw new BadRequestException('Email verification token is missing.');
+      // throw new BadRequestException('Email verification token is missing.');
+      throw new RpcException({ status: 400, message: 'Email verification token is missing.' });
     }
     await this.emailService.sendEmailVerification(
       user.email,
@@ -68,7 +60,8 @@ export class AuthService {
     console.log('User:', user); // Log the user found for debugging
     
     if (!user || !user.password_hash) {
-      throw new UnauthorizedException('Invalid credentials');
+      // throw new UnauthorizedException('Invalid credentials');
+      throw new RpcException({ status: 401, message: 'User not found' });
     }
 
     const isPasswordValid = await this.userService.verifyPassword(
@@ -77,11 +70,13 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      // throw new UnauthorizedException('Invalid credentials');
+      throw new RpcException({ status: 401, message: 'Invalid credentials' });
     }
 
     if (!user.email_verified) {
-      throw new UnauthorizedException('Please verify your email address first');
+      // throw new UnauthorizedException('Please verify your email address first');
+      throw new RpcException({ status: 401, message: 'Please verify your email address first' });
     }
 
     const payload = { sub: user.id, email: user.email };
