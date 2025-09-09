@@ -12,7 +12,7 @@
 
 from kafka import KafkaProducer
 import json
-from src.config import KAFKA_BROKER_URL, KAFKA_RESULT_TOPIC
+from config import KAFKA_BROKER_URL, KAFKA_RESULT_TOPIC
 
 producer = KafkaProducer(
     bootstrap_servers=[KAFKA_BROKER_URL],
