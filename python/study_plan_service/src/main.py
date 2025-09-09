@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from src.kafka_service.consumer import start_consumer
-from src.kafka_service.producer import send_result
-from src.database import get_free_slots
+from kafka_service.consumer import start_consumer
+from kafka_service.producer import send_result
+from database import get_free_slots
 
 app = FastAPI()
 

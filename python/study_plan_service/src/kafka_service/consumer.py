@@ -15,8 +15,8 @@
 
 from kafka import KafkaConsumer
 import json
-from src.controllers.kafka_controller import handle_study_plan_request
-from src.config import KAFKA_BROKER_URL, KAFKA_REQUEST_TOPIC
+from controllers.kafka_controller import handle_study_plan_request
+from config import KAFKA_BROKER_URL, KAFKA_REQUEST_TOPIC
 
 def start_consumer():
     consumer = KafkaConsumer(

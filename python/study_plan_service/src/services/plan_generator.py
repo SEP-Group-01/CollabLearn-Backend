@@ -1,4 +1,4 @@
-from src.models.study_plan import StudyPlanRequest, StudyPlanResult
+from models.study_plan import StudyPlanRequest, StudyPlanResult
 
 def generate_study_plan(request: StudyPlanRequest, free_slots):
     # Simple logic: fill slots, calculate weeks required
