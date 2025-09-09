@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AuthController } from './auth/auth.controller';
 import { WorkspacesController } from './workspaces.controller';
 import { QueryController } from './query.controller';
+import { KafkaService } from './kafka.service';
 import { ClientsModule, Transport} from '@nestjs/microservices' 
 
 @Module({
@@ -29,13 +30,21 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
     ]),
     ClientsModule.register([
       {
-        name: 'QUERY_SERVICE',
+        name: 'KAFKA_SERVICE',
         transport: Transport.KAFKA,
-        options: { client: { brokers:['localhost:9093'] } }
+        options: {
+          client: {
+            clientId: 'api-gateway-client',
+            brokers: ['localhost:9093']
+          },
+          consumer: {
+            groupId: 'nestjs-group-client'
+          }
+        }
       }
     ]),
   ],
   controllers: [AppController, AuthController, WorkspacesController, QueryController],
-  providers: [AppService],
+  providers: [AppService, KafkaService],
 })
 export class AppModule {}
