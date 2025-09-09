@@ -1,7 +1,7 @@
-from models.study_plan import StudyPlanRequest
-from database import get_free_slots, save_study_plan
-from services.plan_generator import generate_study_plan
-from kafka.producer import send_result
+from src.models.study_plan import StudyPlanRequest
+from src.database import get_free_slots, save_study_plan
+from src.services.plan_generator import generate_study_plan
+from src.kafka_service.producer import send_result
 
 def handle_study_plan_request(data):
     request = StudyPlanRequest(**data)
