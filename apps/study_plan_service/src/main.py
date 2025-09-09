@@ -1,5 +1,7 @@
 from fastapi import FastAPI
-from kafka.consumer import start_consumer
+from src.kafka_service.consumer import start_consumer
+from src.kafka_service.producer import send_result
+from src.database import get_free_slots
 
 app = FastAPI()
 
@@ -12,3 +14,12 @@ def startup_event():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/db-test/{user_id}")
+def db_test(user_id: str):
+    try:
+        slots = get_free_slots(user_id)
+        return {"success": True, "slots": slots}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

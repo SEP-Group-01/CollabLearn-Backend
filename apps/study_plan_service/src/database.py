@@ -1,6 +1,6 @@
 import psycopg2
 import json
-from config import DATABASE_URL
+from src.config import DATABASE_URL
 
 def get_free_slots(user_id):
     # Connect and fetch free slots for user
