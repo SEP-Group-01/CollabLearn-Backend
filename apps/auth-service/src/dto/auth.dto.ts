@@ -35,7 +35,7 @@ export class ResetPasswordDto {
 
   @IsString()
   @MinLength(8)
-  new_password: string;
+  newPassword: string;
 }
 
 export class GoogleLoginDto {

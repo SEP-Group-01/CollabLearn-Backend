@@ -1,24 +1,24 @@
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { AuthModule } from './auth.module';
+import { WorkspacesServiceModule } from './workspaces-service.module';
 import { Logger } from '@nestjs/common';
 
-const logger = new Logger('AuthService');
+const logger = new Logger('WorkspacesService');
 
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
-    AuthModule,
+    WorkspacesServiceModule,
     {
       transport: Transport.TCP,
       options: {
         host: '0.0.0.0',
-        port: 3001,
+        port: 3002,
       },
     },
   );
   
   await app.listen();
-  logger.log('Auth Service is running');
-  logger.log('Auth Service is listening on port 3001');
+  logger.log('Workspaces Service is running');
+  logger.log('Workspaces Service is listening on port 3002');
 }
 bootstrap();

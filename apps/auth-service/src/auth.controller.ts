@@ -1,33 +1,25 @@
-// import { Controller, Get } from '@nestjs/common';
-// import { AppService } from './auth.service';
-
-// @Controller()
-// export class AppController {
-//   constructor(private readonly appService: AppService) {}
-
-//   @Get()
-//   getHello(): string {
-//     return this.appService.getHello();
-//   }
-// }
-
-// apps/auth-service/src/auth.controller.ts
-import { Controller, Get } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { Controller, UseFilters, Get } from '@nestjs/common';
+import { MessagePattern, Payload, RpcException} from '@nestjs/microservices';
+// import { throwError } from 'rxjs';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto, GoogleLoginDto } from './dto/auth.dto';
+import { AllExceptionsFilter } from './all-exceptions.filter';
+
+
 
 @Controller()
+@UseFilters(AllExceptionsFilter)
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @MessagePattern({ cmd: 'register' })
-  async register(@Payload() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  @MessagePattern({ cmd: 'sign_up' })
+  async sign_up(@Payload() registerDto: RegisterDto) {
+    return this.authService.sign_up(registerDto);
   }
 
   @MessagePattern({ cmd: 'login' })
   async login(@Payload() loginDto: LoginDto) {
+    console.log('Login attempt:', loginDto); // Log the login attempt for debugging
     return this.authService.login(loginDto);
   }
 
@@ -50,7 +42,7 @@ export class AuthController {
   async resetPassword(@Payload() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(
       resetPasswordDto.token,
-      resetPasswordDto.new_password,
+      resetPasswordDto.newPassword,
     );
   }
 
