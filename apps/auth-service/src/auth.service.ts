@@ -147,14 +147,22 @@ export class AuthService {
         },
       };
     } catch (error) {
-      throw new UnauthorizedException('Invalid Google token');
+      throw new RpcException({ status: 401, message: 'Google authentication failed' });
     }
   }
 
   async verifyEmail(token: string) {
     const user = await this.userService.verifyEmail(token);
+
+    if (!user) {
+      throw new RpcException({ status: 400, message: 'Invalid or expired email verification token' });
+    }
+
+    const jwtPayload = { sub: user.id, email: user.email };
+    const access_token = this.jwtService.sign(jwtPayload);
     return {
       message: 'Email verified successfully',
+      access_token,
       user: {
         id: user.id,
         email: user.email,
@@ -176,9 +184,17 @@ export class AuthService {
 
   async resetPassword(token: string, newPassword: string) {
     const user = await this.userService.resetPassword(token, newPassword);
+
+    if (!user) {
+      throw new RpcException({ status: 400, message: 'Invalid or expired password reset token' });
+    }
     
+    const jwtPayload = { sub: user.id, email: user.email };
+    const access_token = this.jwtService.sign(jwtPayload);
+
     return {
       message: 'Password reset successfully',
+      access_token,
       user: {
         id: user.id,
         email: user.email,

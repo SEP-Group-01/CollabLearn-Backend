@@ -8,6 +8,9 @@ studyplanenv/
 /node_modules
 /build
 
+# virtual environments
+.venv
+
 # Logs
 logs
 *.log

@@ -12,13 +12,13 @@ async function bootstrap() {
       transport: Transport.TCP,
       options: {
         host: '0.0.0.0',
-        port: 3001,
+        port: 3002,
       },
     },
   );
   
   await app.listen();
   logger.log('Auth Service is running');
-  logger.log('Auth Service is listening on port 3001');
+  logger.log('Auth Service is listening on port 3002');
 }
 bootstrap();
