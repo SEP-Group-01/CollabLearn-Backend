@@ -23,3 +23,11 @@ def db_test(user_id: str):
         return {"success": True, "slots": slots}
     except Exception as e:
         return {"success": False, "error": str(e)}
+    
+@app.get("/env-check")
+def env_check():
+    from config import KAFKA_BROKER_URL, DATABASE_URL
+    return {
+        "KAFKA_BROKER_URL": KAFKA_BROKER_URL,
+        "DATABASE_URL": DATABASE_URL
+    }
