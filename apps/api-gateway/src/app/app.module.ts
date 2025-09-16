@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
 import { WorkspacesController } from './controllers/workspaces.controller';
 import { QueryController } from './controllers/query.controller';
@@ -17,29 +17,32 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
       {
         name: 'AUTH_SERVICE',
         transport: Transport.TCP,
-        options: { host: '0.0.0.0', port: 3002 }
+        options: { host: 'auth-service', port: 3002 }
       }
     ]),
     ClientsModule.register([
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: '0.0.0.0', port: 3003 }
+        options: { host: 'workspaces-service', port: 3003 }
       }
     ]),
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'KAFKA_SERVICE',
-        transport: Transport.KAFKA,
-        options: {
-          client: {
-            clientId: 'api-gateway',
-            brokers: ['localhost:9093']
-          },
-          consumer: {
-            groupId: 'gateway-consumer'
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.KAFKA,
+          options: {
+            client: {
+              clientId: 'api-gateway',
+              brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'].map(broker => broker.trim()),
+            },
+            consumer: {
+              groupId: 'gateway-consumer'
+            }
           }
-        }
+        })
       }
     ]),
   ],
