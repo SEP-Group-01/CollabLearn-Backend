@@ -16,7 +16,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // --- 1️⃣ TCP for NestJS microservices ---
+  // --- 1️⃣ TCP for NestJS microservices ---ok
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.TCP,
     options: { host: '0.0.0.0', port: 3001 }, // Use a different port from HTTP
@@ -28,7 +28,7 @@ async function bootstrap() {
     options: {
       client: {
         clientId: 'api-gateway-microservice',
-        brokers: ['localhost:9093']
+        brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'] // Replace with localhost:9093 for local dev
       },
       consumer: {
         groupId: 'gateway-reply-consumer'
