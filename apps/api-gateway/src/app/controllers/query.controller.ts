@@ -1,5 +1,5 @@
 import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
-import { KafkaService } from './kafka.service';
+import { KafkaService } from '../services/kafka.service';
 
 @Controller('query')
 export class QueryController {
@@ -8,9 +8,10 @@ export class QueryController {
     @Post('get-chats')
     async getChats(@Body() body: any) {
         console.log('[QueryController] Get chats request:', body);
+        console.log(this.kafkaService.getSubscribedTopics());
         
         try {
-            const response = await this.kafkaService.sendMessage('document-query.get-chats', body);
+            const response = await this.kafkaService.sendMessage('document-query.chats', body);
             return response;
         } catch (error) {
             throw new HttpException(

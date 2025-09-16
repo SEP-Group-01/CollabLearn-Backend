@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { AuthController } from './auth/auth.controller';
-import { WorkspacesController } from './workspaces.controller';
-import { QueryController } from './query.controller';
-import { KafkaService } from './kafka.service';
+import { AuthController } from './controllers/auth.controller';
+import { WorkspacesController } from './controllers/workspaces.controller';
+import { QueryController } from './controllers/query.controller';
+import { KafkaService } from './services/kafka.service';
+import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport} from '@nestjs/microservices' 
 
 @Module({
@@ -34,17 +33,17 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
         transport: Transport.KAFKA,
         options: {
           client: {
-            clientId: 'api-gateway-client',
+            clientId: 'api-gateway',
             brokers: ['localhost:9093']
           },
           consumer: {
-            groupId: 'nestjs-group-client'
+            groupId: 'gateway-consumer'
           }
         }
       }
     ]),
   ],
-  controllers: [AppController, AuthController, WorkspacesController, QueryController],
-  providers: [AppService, KafkaService],
+  controllers: [AuthController, WorkspacesController, QueryController, KafkaReplyController],
+  providers: [KafkaService],
 })
 export class AppModule {}
