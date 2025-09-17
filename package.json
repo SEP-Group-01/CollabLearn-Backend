@@ -13,6 +13,9 @@
     "start:dev:api-gateway": "npm run build && node dist/apps/api-gateway/main.js",
     "start:dev:api-gateway-watch": "concurrently \"nest build api-gateway --watch\" \"nodemon dist/apps/api-gateway/main.js\"",
     "build:api-gateway": "nest build api-gateway",
+    "build:forum-service": "nest build forum-and-notification-service",
+    "start:dev:forum-service": "nest start forum-and-notification-service --watch",
+    "start:forum-service": "node dist/apps/forum-and-notification-service/main",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/apps/auth-service/main",
     "start:api-gateway": "cd apps/api-gateway && npm run start:dev",
@@ -32,8 +35,11 @@
     "@nestjs/microservices": "^11.1.6",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.6",
+    "@nestjs/websockets": "^11.1.6",
     "@supabase/supabase-js": "^2.53.0",
     "bcrypt": "^6.0.0",
+    "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "google-auth-library": "^10.2.1",
     "kafkajs": "^2.2.4",
@@ -41,7 +47,8 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

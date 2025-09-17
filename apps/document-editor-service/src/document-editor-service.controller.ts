@@ -3,7 +3,9 @@ import { DocumentEditorServiceService } from './document-editor-service.service'
 
 @Controller()
 export class DocumentEditorServiceController {
-  constructor(private readonly documentEditorServiceService: DocumentEditorServiceService) {}
+  constructor(
+    private readonly documentEditorServiceService: DocumentEditorServiceService,
+  ) {}
 
   @Get()
   getHello(): string {

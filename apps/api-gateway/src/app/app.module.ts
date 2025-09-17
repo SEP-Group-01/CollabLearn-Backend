@@ -6,7 +6,7 @@ import { AuthController } from './auth/auth.controller';
 import { WorkspacesController } from './workspaces.controller';
 import { QueryController } from './query.controller';
 import { KafkaService } from './kafka.service';
-import { ClientsModule, Transport} from '@nestjs/microservices' 
+import { ClientsModule, Transport } from '@nestjs/microservices';
 
 @Module({
   imports: [
@@ -18,15 +18,15 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
       {
         name: 'AUTH_SERVICE',
         transport: Transport.TCP,
-        options: { host: '0.0.0.0', port: 3002 }
-      }
+        options: { host: '0.0.0.0', port: 3002 },
+      },
     ]),
     ClientsModule.register([
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: '0.0.0.0', port: 3003 }
-      }
+        options: { host: '0.0.0.0', port: 3003 },
+      },
     ]),
     ClientsModule.register([
       {
@@ -35,16 +35,21 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
         options: {
           client: {
             clientId: 'api-gateway-client',
-            brokers: ['localhost:9093']
+            brokers: ['localhost:9093'],
           },
           consumer: {
-            groupId: 'nestjs-group-client'
-          }
-        }
-      }
+            groupId: 'nestjs-group-client',
+          },
+        },
+      },
     ]),
   ],
-  controllers: [AppController, AuthController, WorkspacesController, QueryController],
+  controllers: [
+    AppController,
+    AuthController,
+    WorkspacesController,
+    QueryController,
+  ],
   providers: [AppService, KafkaService],
 })
 export class AppModule {}

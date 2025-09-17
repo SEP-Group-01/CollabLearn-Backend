@@ -15,16 +15,18 @@ export class KafkaService implements OnModuleInit {
     const commonTopics = [
       'document-query.get-chats',
       'document-query.search-documents',
-      'document-query.get-document-summary'
+      'document-query.get-document-summary',
     ];
-    
+
     console.log('[KafkaService] Pre-subscribing to response topics...');
     for (const topic of commonTopics) {
       this.kafkaClient.subscribeToResponseOf(topic);
       this.subscribedTopics.add(topic);
-      console.log(`[KafkaService] Pre-subscribed to response topic for: ${topic} (expects ${topic}.reply)`);
+      console.log(
+        `[KafkaService] Pre-subscribed to response topic for: ${topic} (expects ${topic}.reply)`,
+      );
     }
-    
+
     // Connect to Kafka
     console.log('[KafkaService] Connecting to Kafka...');
     await this.kafkaClient.connect();
@@ -39,32 +41,47 @@ export class KafkaService implements OnModuleInit {
    */
   async sendMessage(topic: string, message: any): Promise<any> {
     try {
-        // Ensure we're subscribed to the response topic
-        if (!this.subscribedTopics.has(topic)) {
-            console.log(`[KafkaService] Has not subscribed to response topic: ${topic}`);
-        }
+      // Ensure we're subscribed to the response topic
+      if (!this.subscribedTopics.has(topic)) {
+        console.log(
+          `[KafkaService] Has not subscribed to response topic: ${topic}`,
+        );
+      }
 
       // Generate a unique correlation ID and include it in the message
       const correlationId = `${topic}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const messageWithId = { ...message, __correlationId: correlationId };
-      
-      console.log(`[KafkaService] Sending message to topic: ${topic} with correlationId: ${correlationId}`, messageWithId);
-      
+
+      console.log(
+        `[KafkaService] Sending message to topic: ${topic} with correlationId: ${correlationId}`,
+        messageWithId,
+      );
+
       // Add timeout to prevent hanging indefinitely
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Kafka request timeout after 10 seconds')), 10000);
+        setTimeout(
+          () => reject(new Error('Kafka request timeout after 10 seconds')),
+          10000,
+        );
       });
-      
+
       // NestJS Kafka client - we'll use the correlationId in the payload as backup
-      const responsePromise = lastValueFrom(this.kafkaClient
-        .send(topic, messageWithId));
-      
+      const responsePromise = lastValueFrom(
+        this.kafkaClient.send(topic, messageWithId),
+      );
+
       const response = await Promise.race([responsePromise, timeoutPromise]);
-      
-      console.log(`[KafkaService] Received response from topic: ${topic} with correlationId: ${correlationId}`, response);
+
+      console.log(
+        `[KafkaService] Received response from topic: ${topic} with correlationId: ${correlationId}`,
+        response,
+      );
       return response;
     } catch (error) {
-      console.error(`[KafkaService] Error sending message to topic: ${topic}`, error);
+      console.error(
+        `[KafkaService] Error sending message to topic: ${topic}`,
+        error,
+      );
       throw error;
     }
   }
@@ -75,7 +92,9 @@ export class KafkaService implements OnModuleInit {
    * @param topic - The topic to subscribe to responses for
    */
   addTopicForSubscription(topic: string): void {
-    console.log(`[KafkaService] Topic ${topic} will be subscribed on next service restart`);
+    console.log(
+      `[KafkaService] Topic ${topic} will be subscribed on next service restart`,
+    );
     // This is mainly for tracking - actual subscription requires service restart
   }
 
@@ -84,7 +103,9 @@ export class KafkaService implements OnModuleInit {
    * @param topics - Array of topics that should be added to onModuleInit
    */
   getRecommendedTopics(topics: string[]): string[] {
-    console.log(`[KafkaService] Recommended topics for onModuleInit: ${topics.join(', ')}`);
+    console.log(
+      `[KafkaService] Recommended topics for onModuleInit: ${topics.join(', ')}`,
+    );
     return topics;
   }
 
@@ -95,10 +116,16 @@ export class KafkaService implements OnModuleInit {
    */
   async emit(topic: string, message: any): Promise<void> {
     try {
-      console.log(`[KafkaService] Emitting message to topic: ${topic}`, message);
+      console.log(
+        `[KafkaService] Emitting message to topic: ${topic}`,
+        message,
+      );
       this.kafkaClient.emit(topic, message);
     } catch (error) {
-      console.error(`[KafkaService] Error emitting message to topic: ${topic}`, error);
+      console.error(
+        `[KafkaService] Error emitting message to topic: ${topic}`,
+        error,
+      );
       throw error;
     }
   }

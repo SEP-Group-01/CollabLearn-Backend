@@ -16,7 +16,7 @@ async function bootstrap() {
       },
     },
   );
-  
+
   await app.listen();
   logger.log('Workspaces Service is running');
   logger.log('Workspaces Service is listening on port 3002');

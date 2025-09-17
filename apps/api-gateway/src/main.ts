@@ -38,7 +38,7 @@ async function bootstrap() {
 
   // Start all microservices (TCP + Kafka)
   await app.startAllMicroservices();
-  
+
   // Start HTTP server (REST endpoints for frontend)
   await app.listen(3000);
 
@@ -48,10 +48,6 @@ async function bootstrap() {
   logger.log('📩 Kafka consumer connected');
 }
 bootstrap();
-
-
-
-
 
 // import { NestFactory } from '@nestjs/core';
 // import { AppModule } from './app/app.module';

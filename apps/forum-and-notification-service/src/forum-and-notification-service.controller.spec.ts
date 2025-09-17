@@ -11,12 +11,17 @@ describe('ForumAndNotificationServiceController', () => {
       providers: [ForumAndNotificationServiceService],
     }).compile();
 
-    forumAndNotificationServiceController = app.get<ForumAndNotificationServiceController>(ForumAndNotificationServiceController);
+    forumAndNotificationServiceController =
+      app.get<ForumAndNotificationServiceController>(
+        ForumAndNotificationServiceController,
+      );
   });
 
   describe('root', () => {
     it('should return "Hello World!"', () => {
-      expect(forumAndNotificationServiceController.getHello()).toBe('Hello World!');
+      expect(forumAndNotificationServiceController.getHello()).toBe(
+        'Hello World!',
+      );
     });
   });
 });

@@ -12,21 +12,24 @@ import { SupabaseService } from './supabase.service';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ // Load environment variables
-      isGlobal: true,      // Make env accessible globally without importing again
+    ConfigModule.forRoot({
+      // Load environment variables
+      isGlobal: true, // Make env accessible globally without importing again
     }),
-    JwtModule.registerAsync({  // After reading env variables
+    JwtModule.registerAsync({
+      // After reading env variables
       inject: [ConfigService], // Inject ConfigService to access env variables
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET'),  // Injected configService can be used like this
+        secret: configService.get('JWT_SECRET'), // Injected configService can be used like this
         signOptions: {
           expiresIn: configService.get('JWT_EXPIRES_IN', '24h'),
         },
       }),
     }),
   ],
-  controllers: [AuthController],  // handle incoming TCP requests related to authentication
-  providers: [  // injectable classes/services that provide logic and utilities
+  controllers: [AuthController], // handle incoming TCP requests related to authentication
+  providers: [
+    // injectable classes/services that provide logic and utilities
     AuthService,
     UserService,
     EmailService,
