@@ -24,7 +24,17 @@ class QueryController:
         # Extract the action from the topic (e.g., 'get-chats' from 'document-query.get-chats')
         topic_parts = topic.split('.')
         if len(topic_parts) >= 2:
-            action = topic_parts[1].replace('-', '_')  # Convert to method name format
+            raw_action = topic_parts[1].replace('-', '_')  # Convert to method name format
+            
+            # Map topic actions to handler method names
+            action_mapping = {
+                'chats': 'get_chats',  # document-query.chats -> handle_get_chats
+                'search_documents': 'search_documents',  # document-query.search-documents -> handle_search_documents  
+                'get_document_summary': 'get_document_summary',  # document-query.get-document-summary -> handle_get_document_summary
+                'documents': 'documents'  # document-query.documents -> handle_documents
+            }
+            
+            action = action_mapping.get(raw_action, raw_action)
         else:
             action = 'unknown'
         

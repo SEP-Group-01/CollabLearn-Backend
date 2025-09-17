@@ -23,57 +23,19 @@ export class AuthController {
     return 'This is the Auth Service';
   }
 
-  @Post('login')
-  async login(
-    @Body()
-    body: {
-      email: string; //DTOs are in the auth-service
-      password: string;
-    },
-  ) {
-    console.log('Login attempt:', body);
-    // Implement login logic here
-
-    try {
-      return await firstValueFrom(
-        this.authService.send({ cmd: 'login' }, body),
-      ); //can't await does not return a Promise, it returns an RxJS Observable.
-      // converts the first emitted value from that stream into a Promise. then it can be safely awaited.
-    } catch (error) {
-      throw new HttpException(
-        error.message,
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    // Health check endpoint
+    @Get('health')
+    health(): { status: string; timestamp: string } {
+      return {
+        status: 'ok',
+        timestamp: new Date().toISOString()
+      };
     }
-  }
 
-  @Post('signup')
-  async signUp(
-    @Body()
-    body: {
-      email: string;
-      password: string;
-      first_name: string;
-      last_name: string;
-    },
-  ) {
-    console.log('Sign up attempt:', body);
-    try {
-      return await firstValueFrom(
-        this.authService.send({ cmd: 'sign_up' }, body),
-      );
-    } catch (error) {
-      throw new HttpException(
-        error.message,
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Get('verify-email')
-  async verifyEmail(@Query('token') token: string) {
-    if (!token) {
-      return { message: 'Token is missing!' };
+    // Example of a potential HTTP endpoint
+    @Get()
+    getHello(): string {
+      return 'This is the Auth Service';
     }
 
     console.log('Email verification attempt:', token);
