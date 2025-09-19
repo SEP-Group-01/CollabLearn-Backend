@@ -7,6 +7,8 @@ import { ForumController } from './controllers/forum.controller';
 import { KafkaService } from './services/kafka.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { DocumentEditorController } from './controllers/document-editor.controller';
+import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 
 @Module({
   imports: [
@@ -34,6 +36,15 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
         transport: Transport.TCP,
         options: { host: 'forum-service', port: 3004 }, // FORUM_TCP_PORT
       },
+        options: { host: 'workspaces-service', port: 3003 }
+      }
+    ]),
+    ClientsModule.register([
+      {
+        name: 'DOCUMENT_EDITOR_SERVICE',
+        transport: Transport.TCP,
+        options: { host: 'document-editor-service', port: 3004 }
+      }
     ]),
     ClientsModule.registerAsync([
       {

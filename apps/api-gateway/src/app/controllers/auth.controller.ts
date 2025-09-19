@@ -17,11 +17,6 @@ export class AuthController {
     @Inject('AUTH_SERVICE') private readonly authService: ClientProxy,
   ) {}
 
-  private handleError(error: unknown, defaultMessage: string): never {
-    const message = error instanceof Error ? error.message : defaultMessage;
-    throw new HttpException(message, HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-
   // Health check endpoint
   @Get('health')
   health(): { status: string; timestamp: string } {
@@ -41,17 +36,23 @@ export class AuthController {
   async login(
     @Body()
     body: {
-      email: string;
+      email: string; //DTOs are in the auth-service
       password: string;
     },
-  ): Promise<any> {
+  ) {
     console.log('Login attempt:', body);
+    // Implement login logic here
+
     try {
       return await firstValueFrom(
         this.authService.send({ cmd: 'login' }, body),
-      );
+      ); //can't await does not return a Promise, it returns an RxJS Observable.
+      // converts the first emitted value from that stream into a Promise. then it can be safely awaited.
     } catch (error) {
-      this.handleError(error, 'Login failed');
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -64,19 +65,22 @@ export class AuthController {
       first_name: string;
       last_name: string;
     },
-  ): Promise<any> {
+  ) {
     console.log('Sign up attempt:', body);
     try {
       return await firstValueFrom(
         this.authService.send({ cmd: 'sign_up' }, body),
       );
     } catch (error) {
-      this.handleError(error, 'Sign up failed');
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
   @Get('verify-email')
-  async verifyEmail(@Query('token') token: string): Promise<any> {
+  async verifyEmail(@Query('token') token: string) {
     if (!token) {
       return { message: 'Token is missing!' };
     }
@@ -87,12 +91,15 @@ export class AuthController {
         this.authService.send({ cmd: 'verify_email' }, { token }),
       );
     } catch (error) {
-      this.handleError(error, 'Email verification failed');
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
   @Post('forgot-password')
-  async forgotPassword(@Body('email') email: string): Promise<any> {
+  async forgotPassword(@Body('email') email: string) {
     if (!email) {
       return { message: 'Email is missing!' };
     }
@@ -103,7 +110,10 @@ export class AuthController {
         this.authService.send({ cmd: 'forgot_password' }, { email }),
       );
     } catch (error) {
-      this.handleError(error, 'Forgot password failed');
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -111,7 +121,7 @@ export class AuthController {
   async resetPassword(
     @Query('token') token: string,
     @Body() { newPassword }: { newPassword: string },
-  ): Promise<any> {
+  ) {
     if (!token || !newPassword) {
       return { message: 'Token and new password are required!' };
     }
@@ -125,7 +135,10 @@ export class AuthController {
         ),
       );
     } catch (error) {
-      this.handleError(error, 'Reset password failed');
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }

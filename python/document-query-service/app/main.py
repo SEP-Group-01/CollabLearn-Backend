@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from kafka.producer import KafkaProducerService
 from kafka.consumer import KafkaConsumerService
 from controllers.query_controller import QueryController
+from dotenv import load_dotenv
 
 
 BROKERS = "localhost:9093"

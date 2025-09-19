@@ -3,6 +3,7 @@ import { AppModule } from './app/app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
+import { WsAdapter } from '@nestjs/platform-ws';
 
 const logger = new Logger('API-Gateway');
 
@@ -36,6 +37,9 @@ async function bootstrap() {
     },
   });
 
+  // WebSocket Adapter
+  app.useWebSocketAdapter(new WsAdapter(app));
+
   // Start all microservices (TCP + Kafka)
   await app.startAllMicroservices();
 
@@ -47,33 +51,6 @@ async function bootstrap() {
   logger.log('🔌 TCP microservice listening on port 3001');
   logger.log('📩 Kafka microservice configured for reply handling');
   logger.log('📩 Kafka client configured via ClientsModule');
+  logger.log('🔗 WebSocket adapter configured for document collaboration');
 }
 bootstrap();
-
-// import { NestFactory } from '@nestjs/core';
-// import { AppModule } from './app/app.module';
-// import { MicroserviceOptions, Transport} from '@nestjs/microservices';
-// import { ConfigService } from '@nestjs/config';
-// import { Logger } from '@nestjs/common';
-
-// const logger = new Logger('API-Gateway');
-
-// async function bootstrap() {
-//   const app = await NestFactory.create(AppModule);
-//   const configService = app.get(ConfigService);
-
-//   app.enableCors({
-//   origin: configService.get('FRONTEND_URL'),
-//   credentials: true,
-//   });
-
-//   app.connectMicroservice<MicroserviceOptions>({
-//     transport: Transport.TCP,
-//     options: { host: '0.0.0.0', port: 3000 }
-//   });
-//   await app.startAllMicroservices();
-//   await app.listen(3000);
-//   logger.log('API Gateway is running');
-//   logger.log('API Gateway is listening on port 3000');
-// }
-// bootstrap();

@@ -84,7 +84,7 @@ export class KafkaService implements OnModuleInit {
    * @param message - The message payload to send
    * @returns Promise with the response from the consumer
    */
-  async sendMessage(topic: string, message: unknown): Promise<unknown> {
+  async sendMessage(topic: string, message: any): Promise<any> {
     try {
       // Ensure we're subscribed to the response topic
       if (!this.subscribedTopics.has(topic)) {
@@ -97,10 +97,7 @@ export class KafkaService implements OnModuleInit {
 
       // Generate our own correlation ID for event-based pattern
       const correlationId = uuidv4();
-      const messageWithId: Record<string, unknown> = {
-        ...(message as Record<string, unknown>),
-        __correlationId: correlationId,
-      };
+      const messageWithId = { ...message, __correlationId: correlationId };
 
       console.log(
         `[KafkaService] Using emit() with correlationId: ${correlationId}`,
@@ -133,13 +130,12 @@ export class KafkaService implements OnModuleInit {
           `[KafkaService] Emitted message with correlation ID: ${correlationId}, waiting for reply...`,
         );
       });
-    } catch (error: unknown) {
+    } catch (error) {
       console.error(
         `[KafkaService] Error sending message to topic: ${topic}`,
         error,
       );
-      const errorStack = error instanceof Error ? error.stack : 'Unknown error';
-      console.error(`[KafkaService] Error stack:`, errorStack);
+      console.error(`[KafkaService] Error stack:`, error.stack);
       throw error;
     }
   }
