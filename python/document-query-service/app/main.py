@@ -8,9 +8,10 @@ from controllers.query_controller import QueryController
 BROKERS = "localhost:9093"
 # Topics that this service will handle
 TOPICS = [
-    "document-query.get-chats",
-    "document-query.search-documents", 
-    "document-query.get-document-summary"
+    "document-query.chats",
+    "document-query.search-documents",
+    "document-query.get-document-summary", 
+    "document-query.documents"
 ]
 GROUP_ID = "document-query-service"
 SERVICE_NAME = "DocumentQueryService"

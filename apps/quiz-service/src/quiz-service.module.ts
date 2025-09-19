@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { QuizServiceController } from './quiz-service.controller';
-import { QuizServiceService } from './quiz-service.service';
+import { QuizService } from './quiz-service.service';
+import { SupabaseService } from './supabase.service';
+import { AllExceptionsFilter } from './strategies/all-exceptions.filter';
 
 @Module({
-  imports: [],
+  imports: [ConfigModule.forRoot()],
   controllers: [QuizServiceController],
-  providers: [QuizServiceService],
+  providers: [QuizService, SupabaseService, AllExceptionsFilter],
 })
 export class QuizServiceModule {}

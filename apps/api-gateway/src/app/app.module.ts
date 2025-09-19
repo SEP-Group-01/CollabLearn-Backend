@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { AuthController } from './auth/auth.controller';
-import { WorkspacesController } from './workspaces.controller';
-import { QueryController } from './query.controller';
-import { KafkaService } from './kafka.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthController } from './controllers/auth.controller';
+import { WorkspacesController } from './controllers/workspaces.controller';
+import { QueryController } from './controllers/query.controller';
+import { KafkaService } from './services/kafka.service';
+import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport} from '@nestjs/microservices' 
 
 @Module({
@@ -18,33 +17,36 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
       {
         name: 'AUTH_SERVICE',
         transport: Transport.TCP,
-        options: { host: '0.0.0.0', port: 3002 }
+        options: { host: 'auth-service', port: 3002 }
       }
     ]),
     ClientsModule.register([
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: '0.0.0.0', port: 3003 }
+        options: { host: 'workspaces-service', port: 3003 }
       }
     ]),
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'KAFKA_SERVICE',
-        transport: Transport.KAFKA,
-        options: {
-          client: {
-            clientId: 'api-gateway-client',
-            brokers: ['localhost:9093']
-          },
-          consumer: {
-            groupId: 'nestjs-group-client'
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.KAFKA,
+          options: {
+            client: {
+              clientId: 'api-gateway',
+              brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'].map(broker => broker.trim()),
+            },
+            consumer: {
+              groupId: 'gateway-consumer'
+            }
           }
-        }
+        })
       }
     ]),
   ],
-  controllers: [AppController, AuthController, WorkspacesController, QueryController],
-  providers: [AppService, KafkaService],
+  controllers: [AuthController, WorkspacesController, QueryController, KafkaReplyController],
+  providers: [KafkaService],
 })
 export class AppModule {}

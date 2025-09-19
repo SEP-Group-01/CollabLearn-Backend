@@ -11,7 +11,9 @@ describe('QuizServiceController', () => {
       providers: [QuizServiceService],
     }).compile();
 
-    quizServiceController = app.get<QuizServiceController>(QuizServiceController);
+    quizServiceController = app.get<QuizServiceController>(
+      QuizServiceController,
+    );
   });
 
   describe('root', () => {

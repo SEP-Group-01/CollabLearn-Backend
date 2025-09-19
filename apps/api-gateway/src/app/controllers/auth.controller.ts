@@ -7,6 +7,15 @@ export class AuthController {
 
     constructor(@Inject("AUTH_SERVICE") private readonly authService: ClientProxy) {}
 
+    // Health check endpoint
+    @Get('health')
+    health(): { status: string; timestamp: string } {
+      return {
+        status: 'ok',
+        timestamp: new Date().toISOString()
+      };
+    }
+
     // Example of a potential HTTP endpoint
     @Get()
     getHello(): string {
