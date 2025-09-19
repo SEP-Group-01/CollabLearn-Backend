@@ -32,17 +32,21 @@
     "@nestjs/microservices": "^11.1.6",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-ws": "^11.1.6",
     "@supabase/supabase-js": "^2.53.0",
     "bcrypt": "^6.0.0",
     "class-validator": "^0.14.2",
     "google-auth-library": "^10.2.1",
     "kafkajs": "^2.2.4",
+    "lib0": "^0.2.114",
     "nodemailer": "^7.0.5",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.27"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

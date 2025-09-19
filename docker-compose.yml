@@ -49,8 +49,8 @@ services:
       - '3001:3001' # TCP Microservice
     environment:
       - NODE_ENV=production
-      - FRONTEND_URL=http://localhost:3001
-      - KAFKA_BROKERS=kafka:9092
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-kafka:9092}
     depends_on:
       kafka:
         condition: service_healthy

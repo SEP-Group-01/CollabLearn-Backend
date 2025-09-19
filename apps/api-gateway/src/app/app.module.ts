@@ -3,8 +3,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
 import { WorkspacesController } from './controllers/workspaces.controller';
 import { QueryController } from './controllers/query.controller';
+import { DocumentEditorController } from './controllers/document-editor.controller';
 import { KafkaService } from './services/kafka.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
+import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 import { ClientsModule, Transport} from '@nestjs/microservices' 
 
 @Module({
@@ -27,6 +29,13 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
         options: { host: 'workspaces-service', port: 3003 }
       }
     ]),
+    ClientsModule.register([
+      {
+        name: 'DOCUMENT_EDITOR_SERVICE',
+        transport: Transport.TCP,
+        options: { host: 'document-editor-service', port: 3004 }
+      }
+    ]),
     ClientsModule.registerAsync([
       {
         name: 'KAFKA_SERVICE',
@@ -46,7 +55,7 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
       }
     ]),
   ],
-  controllers: [AuthController, WorkspacesController, QueryController, KafkaReplyController],
-  providers: [KafkaService],
+  controllers: [AuthController, WorkspacesController, QueryController, DocumentEditorController, KafkaReplyController],
+  providers: [KafkaService, DocumentEditorGateway],
 })
 export class AppModule {}
