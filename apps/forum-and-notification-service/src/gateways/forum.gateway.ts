@@ -13,7 +13,11 @@ import { ForumService } from '../services/forum.service';
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:5173'],
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://collab-learn-frontend.vercel.app', // Add your deployed frontend
+    ],
     credentials: true,
   },
   namespace: '/forum',
