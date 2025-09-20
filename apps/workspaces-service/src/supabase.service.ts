@@ -22,4 +22,8 @@ export class SupabaseService {
   getClient(): SupabaseClient {
     return this.supabase;
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/dev

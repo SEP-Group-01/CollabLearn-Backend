@@ -14,7 +14,7 @@ async function bootstrap() {
         host: '0.0.0.0',
         port: 3004,
       },
-    }
+    },
   );
 
   await app.listen();

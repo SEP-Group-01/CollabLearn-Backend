@@ -29,12 +29,12 @@ async function bootstrap() {
     options: {
       client: {
         clientId: 'api-gateway-microservice',
-        brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'] // Replace with localhost:9093 for local dev
+        brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'], // Replace with localhost:9093 for local dev
       },
       consumer: {
-        groupId: 'gateway-reply-consumer'
-      }
-    }
+        groupId: 'gateway-reply-consumer',
+      },
+    },
   });
 
   // WebSocket Adapter
@@ -42,7 +42,7 @@ async function bootstrap() {
 
   // Start all microservices (TCP + Kafka)
   await app.startAllMicroservices();
-  
+
   // Start HTTP server (REST endpoints for frontend)
   await app.listen(3000);
 

@@ -21,7 +21,7 @@ export class EmailService {
 
   async sendEmailVerification(email: string, token: string): Promise<void> {
     const verificationUrl = `${this.configService.get('FRONTEND_URL')}/verify-email?token=${token}`;
-    
+
     await this.transporter.sendMail({
       from: this.configService.get('FROM_EMAIL'),
       to: email,
@@ -38,7 +38,7 @@ export class EmailService {
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
     const resetUrl = `${this.configService.get('FRONTEND_URL')}/reset-password?token=${token}`;
-    
+
     await this.transporter.sendMail({
       from: this.configService.get('FROM_EMAIL'),
       to: email,

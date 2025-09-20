@@ -16,7 +16,7 @@ async function bootstrap() {
       },
     },
   );
-  
+
   await app.listen();
   logger.log('Auth Service is running');
   logger.log('Auth Service is listening on port 3002');

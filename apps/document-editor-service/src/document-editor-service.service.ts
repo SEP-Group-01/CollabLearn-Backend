@@ -18,7 +18,7 @@ export class DocumentEditorServiceService {
       this.documents.set(documentId, ydoc);
       this.collaborators.set(documentId, new Set());
       this.awareness.set(documentId, new Map());
-      
+
       // Initialize document with basic structure
       const ytext = ydoc.getText('content');
       if (ytext.length === 0) {
@@ -32,7 +32,7 @@ export class DocumentEditorServiceService {
     this.logger.log(`Getting document: ${documentId}`);
     const ydoc = this.getOrCreateDocument(documentId);
     const ytext = ydoc.getText('content');
-    
+
     return {
       id: documentId,
       content: ytext.toString(),
@@ -45,15 +45,15 @@ export class DocumentEditorServiceService {
   async createDocument(data: any) {
     const documentId = data.documentId || `doc_${Date.now()}`;
     this.logger.log(`Creating document: ${documentId}`);
-    
+
     const ydoc = this.getOrCreateDocument(documentId);
-    
+
     if (data.content) {
       const ytext = ydoc.getText('content');
       ytext.delete(0, ytext.length);
       ytext.insert(0, data.content);
     }
-    
+
     return {
       id: documentId,
       title: data.title || 'New Document',
@@ -65,14 +65,20 @@ export class DocumentEditorServiceService {
     };
   }
 
-  async applyYjsUpdate(data: { documentId: string; userId: string; update: Uint8Array }) {
-    this.logger.log(`Applying Y.js update to document: ${data.documentId} from user: ${data.userId}`);
-    
+  async applyYjsUpdate(data: {
+    documentId: string;
+    userId: string;
+    update: Uint8Array;
+  }) {
+    this.logger.log(
+      `Applying Y.js update to document: ${data.documentId} from user: ${data.userId}`,
+    );
+
     const ydoc = this.getOrCreateDocument(data.documentId);
-    
+
     // Apply the Y.js update
     Y.applyUpdate(ydoc, data.update);
-    
+
     return {
       documentId: data.documentId,
       userId: data.userId,
@@ -92,7 +98,9 @@ export class DocumentEditorServiceService {
   }
 
   async getYjsUpdateSince(documentId: string, stateVector: Uint8Array) {
-    this.logger.log(`Getting Y.js updates since state vector for document: ${documentId}`);
+    this.logger.log(
+      `Getting Y.js updates since state vector for document: ${documentId}`,
+    );
     const ydoc = this.getOrCreateDocument(documentId);
     return {
       documentId,
@@ -100,18 +108,25 @@ export class DocumentEditorServiceService {
     };
   }
 
-  async updateDocument(data: { documentId: string; userId: string; content: any; operation: string }) {
-    this.logger.log(`Legacy update for document: ${data.documentId} by user: ${data.userId}`);
-    
+  async updateDocument(data: {
+    documentId: string;
+    userId: string;
+    content: any;
+    operation: string;
+  }) {
+    this.logger.log(
+      `Legacy update for document: ${data.documentId} by user: ${data.userId}`,
+    );
+
     const ydoc = this.getOrCreateDocument(data.documentId);
     const ytext = ydoc.getText('content');
-    
+
     // For legacy compatibility - replace entire content
     if (data.operation === 'replace' && typeof data.content === 'string') {
       ytext.delete(0, ytext.length);
       ytext.insert(0, data.content);
     }
-    
+
     return {
       documentId: data.documentId,
       userId: data.userId,
@@ -131,21 +146,21 @@ export class DocumentEditorServiceService {
 
   async joinDocument(documentId: string, userId: string) {
     this.logger.log(`User ${userId} joining document: ${documentId}`);
-    
+
     if (!this.collaborators.has(documentId)) {
       this.collaborators.set(documentId, new Set());
     }
-    
+
     const collaboratorSet = this.collaborators.get(documentId);
     if (collaboratorSet) {
       collaboratorSet.add(userId);
     }
-    
+
     const ydoc = this.getOrCreateDocument(documentId);
-    const activeCollaborators = this.collaborators.get(documentId) 
-      ? Array.from(this.collaborators.get(documentId)!) 
+    const activeCollaborators = this.collaborators.get(documentId)
+      ? Array.from(this.collaborators.get(documentId)!)
       : [];
-    
+
     return {
       document: {
         id: documentId,
@@ -159,7 +174,7 @@ export class DocumentEditorServiceService {
 
   async leaveDocument(documentId: string, userId: string) {
     this.logger.log(`User ${userId} leaving document: ${documentId}`);
-    
+
     if (this.collaborators.has(documentId)) {
       const collaboratorSet = this.collaborators.get(documentId);
       if (collaboratorSet) {
@@ -171,11 +186,11 @@ export class DocumentEditorServiceService {
     if (this.awareness.has(documentId)) {
       this.awareness.get(documentId)!.delete(userId);
     }
-    
-    const activeCollaborators = this.collaborators.has(documentId) 
-      ? Array.from(this.collaborators.get(documentId)!) 
+
+    const activeCollaborators = this.collaborators.has(documentId)
+      ? Array.from(this.collaborators.get(documentId)!)
       : [];
-    
+
     return {
       documentId,
       collaborators: activeCollaborators,
@@ -183,18 +198,24 @@ export class DocumentEditorServiceService {
     };
   }
 
-  async updateAwareness(data: { documentId: string; userId: string; awareness: any }) {
-    this.logger.log(`Updating awareness for user ${data.userId} in document: ${data.documentId}`);
-    
+  async updateAwareness(data: {
+    documentId: string;
+    userId: string;
+    awareness: any;
+  }) {
+    this.logger.log(
+      `Updating awareness for user ${data.userId} in document: ${data.documentId}`,
+    );
+
     if (!this.awareness.has(data.documentId)) {
       this.awareness.set(data.documentId, new Map());
     }
-    
+
     this.awareness.get(data.documentId)!.set(data.userId, {
       ...data.awareness,
       timestamp: new Date(),
     });
-    
+
     return {
       documentId: data.documentId,
       userId: data.userId,
@@ -204,15 +225,15 @@ export class DocumentEditorServiceService {
 
   async getCollaborators(documentId: string) {
     this.logger.log(`Getting collaborators for document: ${documentId}`);
-    
-    const activeCollaborators = this.collaborators.has(documentId) 
-      ? Array.from(this.collaborators.get(documentId)!) 
+
+    const activeCollaborators = this.collaborators.has(documentId)
+      ? Array.from(this.collaborators.get(documentId)!)
       : [];
 
     const awarenessData = this.awareness.has(documentId)
       ? Object.fromEntries(this.awareness.get(documentId)!)
       : {};
-    
+
     return {
       documentId,
       collaborators: activeCollaborators,
@@ -222,12 +243,12 @@ export class DocumentEditorServiceService {
 
   async shareDocument(data: { documentId: string; [key: string]: any }) {
     this.logger.log(`Sharing document: ${data.documentId}`);
-    
+
     const ydoc = this.documents.get(data.documentId);
     if (!ydoc) {
       throw new Error('Document not found');
     }
-    
+
     return {
       documentId: data.documentId,
       shared: true,
