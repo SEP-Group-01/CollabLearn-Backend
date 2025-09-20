@@ -3,9 +3,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
 import { WorkspacesController } from './controllers/workspaces.controller';
 import { QueryController } from './controllers/query.controller';
+import { ForumController } from './controllers/forum.controller';
 import { KafkaService } from './services/kafka.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
-import { ClientsModule, Transport} from '@nestjs/microservices' 
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { DocumentEditorController } from './controllers/document-editor.controller';
+import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 
 @Module({
   imports: [
@@ -17,14 +20,30 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
       {
         name: 'AUTH_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'auth-service', port: 3002 }
-      }
+        options: { host: 'auth-service', port: 3002 }, // AUTH_SERVICE_PORT
+      },
     ]),
     ClientsModule.register([
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
+        options: { host: 'workspaces-service', port: 3005 }, // WORKSPACES_SERVICE_PORT
+      },
+    ]),
+    ClientsModule.register([
+      {
+        name: 'FORUM_SERVICE',
+        transport: Transport.TCP,
+        options: { host: 'forum-service', port: 3004 }, // FORUM_TCP_PORT
+      },
         options: { host: 'workspaces-service', port: 3003 }
+      }
+    ]),
+    ClientsModule.register([
+      {
+        name: 'DOCUMENT_EDITOR_SERVICE',
+        transport: Transport.TCP,
+        options: { host: 'document-editor-service', port: 3004 }
       }
     ]),
     ClientsModule.registerAsync([
@@ -36,17 +55,25 @@ import { ClientsModule, Transport} from '@nestjs/microservices'
           options: {
             client: {
               clientId: 'api-gateway',
-              brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'].map(broker => broker.trim()),
+              brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'].map(
+                (broker) => broker.trim(),
+              ),
             },
             consumer: {
-              groupId: 'gateway-consumer'
-            }
-          }
-        })
-      }
+              groupId: 'gateway-consumer',
+            },
+          },
+        }),
+      },
     ]),
   ],
-  controllers: [AuthController, WorkspacesController, QueryController, KafkaReplyController],
+  controllers: [
+    AuthController,
+    WorkspacesController,
+    QueryController,
+    ForumController, // Add forum controller
+    KafkaReplyController,
+  ],
   providers: [KafkaService],
 })
 export class AppModule {}

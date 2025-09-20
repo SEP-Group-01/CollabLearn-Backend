@@ -1,5 +1,5 @@
-import {Catch, RpcExceptionFilter} from '@nestjs/common'
-import { RpcException } from '@nestjs/microservices'
+import { Catch, RpcExceptionFilter } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import { throwError } from 'rxjs';
 
 @Catch()

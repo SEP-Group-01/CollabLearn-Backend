@@ -8,6 +8,16 @@ studyplanenv/
 /node_modules
 /build
 
+
+# dependencies
+/__pycache__
+*.pyc
+
+# Python service cache directories
+python/document-query-service/__pycache__/
+python/document-query-service/app/__pycache__/
+python/study_plan_service/__pycache__/
+
 # virtual environments
 .venv
 

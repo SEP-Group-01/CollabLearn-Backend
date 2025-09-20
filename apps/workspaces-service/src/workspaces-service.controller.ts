@@ -45,6 +45,9 @@ export class WorkspacesController {
 
   @MessagePattern({ cmd: 'request-workspace' })
   requestWorkspace(data: { userId: string; workspaceId: string }) {
-    return this.workspacesService.requestWorkspace(data.userId, data.workspaceId);
+    return this.workspacesService.requestWorkspace(
+      data.userId,
+      data.workspaceId,
+    );
   }
 }
