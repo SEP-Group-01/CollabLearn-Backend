@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from './user.service';
 import { EmailService } from './email.service';
@@ -35,7 +35,10 @@ export class AuthService {
     // Send email verification
     if (!user.email_verification_token) {
       // throw new BadRequestException('Email verification token is missing.');
-      throw new RpcException({ status: 400, message: 'Email verification token is missing.' });
+      throw new RpcException({
+        status: 400,
+        message: 'Email verification token is missing.',
+      });
     }
     await this.emailService.sendEmailVerification(
       user.email,
@@ -43,7 +46,8 @@ export class AuthService {
     );
 
     return {
-      message: 'User registered successfully. Please check your email to verify your account.',
+      message:
+        'User registered successfully. Please check your email to verify your account.',
       user: {
         id: user.id,
         email: user.email,
@@ -58,7 +62,7 @@ export class AuthService {
     const user = await this.userService.findUserByEmail(loginDto.email);
 
     console.log('User:', user); // Log the user found for debugging
-    
+
     if (!user || !user.password_hash) {
       // throw new UnauthorizedException('Invalid credentials');
       throw new RpcException({ status: 401, message: 'User not found' });
@@ -76,7 +80,10 @@ export class AuthService {
 
     if (!user.email_verified) {
       // throw new UnauthorizedException('Please verify your email address first');
-      throw new RpcException({ status: 401, message: 'Please verify your email address first' });
+      throw new RpcException({
+        status: 401,
+        message: 'Please verify your email address first',
+      });
     }
 
     const payload = { sub: user.id, email: user.email };
@@ -114,7 +121,7 @@ export class AuthService {
           throw new UnauthorizedException('Google account email is missing');
         }
         user = await this.userService.findUserByEmail(payload.email);
-        
+
         if (user) {
           // Link Google account to existing user
           user = await this.userService.updateUser(user.id, {
@@ -147,7 +154,10 @@ export class AuthService {
         },
       };
     } catch (error) {
-      throw new RpcException({ status: 401, message: 'Google authentication failed' });
+      throw new RpcException({
+        status: 401,
+        message: 'Google authentication failed',
+      });
     }
   }
 
@@ -155,7 +165,10 @@ export class AuthService {
     const user = await this.userService.verifyEmail(token);
 
     if (!user) {
-      throw new RpcException({ status: 400, message: 'Invalid or expired email verification token' });
+      throw new RpcException({
+        status: 400,
+        message: 'Invalid or expired email verification token',
+      });
     }
 
     const jwtPayload = { sub: user.id, email: user.email };
@@ -176,7 +189,7 @@ export class AuthService {
   async forgotPassword(email: string) {
     const resetToken = await this.userService.generateResetToken(email);
     await this.emailService.sendPasswordReset(email, resetToken);
-    
+
     return {
       message: 'Password reset link sent to your email',
     };
@@ -186,9 +199,12 @@ export class AuthService {
     const user = await this.userService.resetPassword(token, newPassword);
 
     if (!user) {
-      throw new RpcException({ status: 400, message: 'Invalid or expired password reset token' });
+      throw new RpcException({
+        status: 400,
+        message: 'Invalid or expired password reset token',
+      });
     }
-    
+
     const jwtPayload = { sub: user.id, email: user.email };
     const access_token = this.jwtService.sign(jwtPayload);
 
@@ -205,7 +221,8 @@ export class AuthService {
     };
   }
 
-  async validateUser(userId: string): Promise<User | null> { //methana awlk ynn puluwn null return karla
+  async validateUser(userId: string): Promise<User | null> {
+    //methana awlk ynn puluwn null return karla
     return this.userService.findUserById(userId);
   }
 

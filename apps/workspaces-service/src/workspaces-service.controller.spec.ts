@@ -16,7 +16,9 @@ describe('WorkspacesController', () => {
 
   describe('root', () => {
     it('should return "Hello World!"', () => {
-      expect(workspacesController.getHello()).toBe('Hello World! from Workspaces Service');
+      expect(workspacesController.getHello()).toBe(
+        'Hello World! from Workspaces Service',
+      );
     });
   });
 });

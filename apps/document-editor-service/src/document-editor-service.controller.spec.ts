@@ -11,7 +11,9 @@ describe('DocumentEditorServiceController', () => {
       providers: [DocumentEditorServiceService],
     }).compile();
 
-    documentEditorServiceController = app.get<DocumentEditorServiceController>(DocumentEditorServiceController);
+    documentEditorServiceController = app.get<DocumentEditorServiceController>(
+      DocumentEditorServiceController,
+    );
   });
 
   describe('root', () => {

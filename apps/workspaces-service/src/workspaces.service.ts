@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from './supabase.service';
 import { RpcException } from '@nestjs/microservices';
-import { CreateWorkspaceDto, UpdateWorkspaceDto} from './workspaces.dto'
+import { CreateWorkspaceDto, UpdateWorkspaceDto } from './workspaces.dto';
 import { title } from 'process';
 
 @Injectable()
@@ -24,7 +24,10 @@ export class WorkspacesService {
       return data;
     } catch (error) {
       console.error('Error fetching workspace:', error);
-      throw new RpcException({ status: 500, message: 'Error fetching workspace' });
+      throw new RpcException({
+        status: 500,
+        message: 'Error fetching workspace',
+      });
     }
   }
 
@@ -43,7 +46,10 @@ export class WorkspacesService {
       return data;
     } catch (error) {
       console.error('Error fetching workspaces by user ID:', error);
-      throw new RpcException({ status: 500, message: 'Error fetching workspaces by user ID' });
+      throw new RpcException({
+        status: 500,
+        message: 'Error fetching workspaces by user ID',
+      });
     }
   }
 
@@ -63,7 +69,10 @@ export class WorkspacesService {
       return data;
     } catch (error) {
       console.error('Error fetching workspaces by search term:', error);
-      throw new RpcException({ status: 500, message: 'Error fetching workspaces by search term' });
+      throw new RpcException({
+        status: 500,
+        message: 'Error fetching workspaces by search term',
+      });
     }
   }
 
@@ -73,33 +82,38 @@ export class WorkspacesService {
     try {
       const { data, error } = await supabase
         .from('workspaces')
-        .insert([{
-          title: workspaceData.title,
-          description: workspaceData.description,
-          join_policy: workspaceData.join_policy
-        }])
+        .insert([
+          {
+            title: workspaceData.title,
+            description: workspaceData.description,
+            join_policy: workspaceData.join_policy,
+          },
+        ])
         .select();
 
       let workspace_id;
-      if (data && data.length > 0){
+      if (data && data.length > 0) {
         workspace_id = data[0].id;
       }
 
       try {
-        const {data: adminData, error: adminError} = await supabase
+        const { data: adminData, error: adminError } = await supabase
           .from('admins')
-          .insert([{ user_id: workspaceData.user_id, 
-            workspace_id: workspace_id
-          }]);
-        } catch (error) {
-          console.error('Error adding admin:', error);
-          throw new RpcException({ status: 500, message: 'Error adding admin' });
-        }
+          .insert([
+            { user_id: workspaceData.user_id, workspace_id: workspace_id },
+          ]);
+      } catch (error) {
+        console.error('Error adding admin:', error);
+        throw new RpcException({ status: 500, message: 'Error adding admin' });
+      }
 
       return data;
     } catch (error) {
       console.error('Error creating workspace:', error);
-      throw new RpcException({ status: 500, message: 'Error creating workspace' });
+      throw new RpcException({
+        status: 500,
+        message: 'Error creating workspace',
+      });
     }
   }
 
@@ -128,20 +142,36 @@ export class WorkspacesService {
   async joinWorkspace(userId: string, workspaceId: string) {
     // join workspace logic Implement krla na thama
     try {
-      return { success: true, message: 'User joined workspace successfully', userId, workspaceId };
+      return {
+        success: true,
+        message: 'User joined workspace successfully',
+        userId,
+        workspaceId,
+      };
     } catch (error) {
       console.error('Error joining workspace:', error);
-      throw new RpcException({ status: 500, message: 'Error joining workspace' });
+      throw new RpcException({
+        status: 500,
+        message: 'Error joining workspace',
+      });
     }
   }
 
   async requestWorkspace(userId: string, workspaceId: string) {
     // request workspace logic Implement krla na thama
     try {
-      return { success: true, message: 'Workspace request sent successfully', userId, workspaceId };
+      return {
+        success: true,
+        message: 'Workspace request sent successfully',
+        userId,
+        workspaceId,
+      };
     } catch (error) {
       console.error('Error requesting workspace:', error);
-      throw new RpcException({ status: 500, message: 'Error requesting workspace' });
+      throw new RpcException({
+        status: 500,
+        message: 'Error requesting workspace',
+      });
     }
   }
 

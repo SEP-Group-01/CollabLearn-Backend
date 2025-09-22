@@ -3,14 +3,16 @@ from fastapi import FastAPI
 from kafka.producer import KafkaProducerService
 from kafka.consumer import KafkaConsumerService
 from controllers.query_controller import QueryController
+from dotenv import load_dotenv
 
 
 BROKERS = "localhost:9093"
 # Topics that this service will handle
 TOPICS = [
-    "document-query.get-chats",
-    "document-query.search-documents", 
-    "document-query.get-document-summary"
+    "document-query.chats",
+    "document-query.search-documents",
+    "document-query.get-document-summary", 
+    "document-query.documents"
 ]
 GROUP_ID = "document-query-service"
 SERVICE_NAME = "DocumentQueryService"

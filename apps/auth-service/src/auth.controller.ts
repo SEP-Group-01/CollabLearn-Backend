@@ -1,11 +1,15 @@
 import { Controller, UseFilters, Get } from '@nestjs/common';
-import { MessagePattern, Payload, RpcException} from '@nestjs/microservices';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 // import { throwError } from 'rxjs';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto, GoogleLoginDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  GoogleLoginDto,
+} from './dto/auth.dto';
 import { AllExceptionsFilter } from './all-exceptions.filter';
-
-
 
 @Controller()
 @UseFilters(AllExceptionsFilter)

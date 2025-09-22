@@ -1,5 +1,9 @@
 // apps/auth-service/src/user.service.ts
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { SupabaseService } from './supabase.service';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
@@ -11,7 +15,7 @@ export class UserService {
 
   async createUser(userData: Partial<User>): Promise<User> {
     const supabase = this.supabaseService.getClient();
-    
+
     // Check if user already exists
     const { data: existingUser } = await supabase
       .from('users')
@@ -49,14 +53,15 @@ export class UserService {
 
   async findUserByEmail(email: string): Promise<User | null> {
     const supabase = this.supabaseService.getClient();
-    
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('email', email)
       .single();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 is "not found"
       throw new Error(`Failed to find user: ${error.message}`);
     }
 
@@ -65,7 +70,7 @@ export class UserService {
 
   async findUserById(id: string): Promise<User | null> {
     const supabase = this.supabaseService.getClient();
-    
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -81,7 +86,7 @@ export class UserService {
 
   async findUserByGoogleId(googleId: string): Promise<User | null> {
     const supabase = this.supabaseService.getClient();
-    
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -97,7 +102,7 @@ export class UserService {
 
   async updateUser(id: string, updateData: Partial<User>): Promise<User> {
     const supabase = this.supabaseService.getClient();
-    
+
     updateData.updated_at = new Date();
 
     const { data, error } = await supabase
@@ -114,13 +119,16 @@ export class UserService {
     return data;
   }
 
-  async verifyPassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+  async verifyPassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
   }
 
   async verifyEmail(token: string): Promise<User> {
     const supabase = this.supabaseService.getClient();
-    
+
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
@@ -156,7 +164,7 @@ export class UserService {
 
   async resetPassword(token: string, newPassword: string): Promise<User> {
     const supabase = this.supabaseService.getClient();
-    
+
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
