@@ -9,9 +9,13 @@ export class SupabaseService {
 
   constructor(private configService: ConfigService) {
     const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
-    const supabaseServiceKey = this.configService.get<string>('SUPABASE_SERVICE_KEY');
+    const supabaseServiceKey = this.configService.get<string>(
+      'SUPABASE_SERVICE_KEY',
+    );
     if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL or SUPABASE_SERVICE_KEY is not defined in environment variables');
+      throw new Error(
+        'SUPABASE_URL or SUPABASE_SERVICE_KEY is not defined in environment variables',
+      );
     }
     this.supabase = createClient(
       supabaseUrl,
@@ -22,8 +26,4 @@ export class SupabaseService {
   getClient(): SupabaseClient {
     return this.supabase;
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> origin/dev

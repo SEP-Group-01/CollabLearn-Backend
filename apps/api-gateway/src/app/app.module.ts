@@ -9,6 +9,7 @@ import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { DocumentEditorController } from './controllers/document-editor.controller';
 import { DocumentEditorGateway } from './gateways/document-editor.gateway';
+import { ForumGateway } from './gateways/forum.gateway';
 
 @Module({
   imports: [
@@ -20,31 +21,29 @@ import { DocumentEditorGateway } from './gateways/document-editor.gateway';
       {
         name: 'AUTH_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'auth-service', port: 3002 }, // AUTH_SERVICE_PORT
+        options: { host: 'localhost', port: 3002 }, // AUTH_SERVICE_PORT
       },
     ]),
     ClientsModule.register([
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'workspaces-service', port: 3005 }, // WORKSPACES_SERVICE_PORT
+        options: { host: 'localhost', port: 3005 }, // WORKSPACES_SERVICE_PORT (corrected port)
       },
     ]),
     ClientsModule.register([
       {
         name: 'FORUM_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'forum-service', port: 3004 }, // FORUM_TCP_PORT
+        options: { host: 'localhost', port: 3004 }, // FORUM_TCP_PORT
       },
-        options: { host: 'workspaces-service', port: 3003 }
-      }
     ]),
     ClientsModule.register([
       {
         name: 'DOCUMENT_EDITOR_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'document-editor-service', port: 3004 }
-      }
+        options: { host: 'localhost', port: 3006 }, // DOCUMENT_EDITOR_SERVICE_PORT
+      },
     ]),
     ClientsModule.registerAsync([
       {
@@ -55,9 +54,9 @@ import { DocumentEditorGateway } from './gateways/document-editor.gateway';
           options: {
             client: {
               clientId: 'api-gateway',
-              brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'].map(
-                (broker) => broker.trim(),
-              ),
+              brokers: [
+                configService.get('KAFKA_BROKERS') || 'localhost:9092',
+              ].map((broker) => broker.trim()),
             },
             consumer: {
               groupId: 'gateway-consumer',
@@ -72,8 +71,9 @@ import { DocumentEditorGateway } from './gateways/document-editor.gateway';
     WorkspacesController,
     QueryController,
     ForumController, // Add forum controller
+    DocumentEditorController, // Add document editor controller
     KafkaReplyController,
   ],
-  providers: [KafkaService],
+  providers: [KafkaService, DocumentEditorGateway, ForumGateway],
 })
 export class AppModule {}
