@@ -3,8 +3,10 @@ import {
   Inject,
   Post,
   Get,
+  Put,
   Query,
   Body,
+  Param,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -25,8 +27,23 @@ export class WorkspacesController {
     );
   }
 
+  @Get(':id')
+  async getWorkspaceById(@Param('id') id: string) {
+    try {
+      const workspace = await firstValueFrom(
+        this.workspacesService.send({ cmd: 'get-workspace-by-id' }, { id }),
+      );
+      return workspace;
+    } catch (error) {
+      throw new HttpException(
+        'Error fetching workspace',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Post('get-workspace-by-id')
-  async getWorkspaceById(@Body() body: { id: string }) {
+  async getWorkspaceByIdPost(@Body() body: { id: string }) {
     try {
       const workspace = await firstValueFrom(
         this.workspacesService.send({ cmd: 'get-workspace-by-id' }, body),
@@ -148,6 +165,93 @@ export class WorkspacesController {
     } catch (error) {
       throw new HttpException(
         'Error requesting workspace',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Workspace Forum Routes
+  @Get(':workspaceId/forum/messages')
+  async getWorkspaceForumMessages(@Param('workspaceId') workspaceId: string) {
+    try {
+      // For now, we'll use the workspace ID as the group ID
+      // Later you can implement proper workspace-to-forum-group mapping
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'get-workspace-forum-messages' },
+          { workspaceId },
+        ),
+      );
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        'Error fetching workspace forum messages',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post(':workspaceId/forum/messages')
+  async createWorkspaceForumMessage(
+    @Param('workspaceId') workspaceId: string,
+    @Body()
+    body: { authorId: string; content: string; parentMessageId?: string },
+  ) {
+    try {
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'create-workspace-forum-message' },
+          { workspaceId, ...body },
+        ),
+      );
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        'Error creating workspace forum message',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post(':workspaceId/forum/messages/:messageId/like')
+  async toggleWorkspaceForumMessageLike(
+    @Param('workspaceId') workspaceId: string,
+    @Param('messageId') messageId: string,
+    @Body() body: { userId: string },
+  ) {
+    try {
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'toggle-workspace-forum-message-like' },
+          { workspaceId, messageId, ...body },
+        ),
+      );
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        'Error toggling workspace forum message like',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Put(':workspaceId/forum/messages/:messageId/pin')
+  async pinWorkspaceForumMessage(
+    @Param('workspaceId') workspaceId: string,
+    @Param('messageId') messageId: string,
+    @Body() body: { userId: string },
+  ) {
+    try {
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'pin-workspace-forum-message' },
+          { workspaceId, messageId, ...body },
+        ),
+      );
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        'Error pinning workspace forum message',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
