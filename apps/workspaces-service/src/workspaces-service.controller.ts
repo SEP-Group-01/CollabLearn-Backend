@@ -50,4 +50,37 @@ export class WorkspacesController {
       data.workspaceId,
     );
   }
+
+  @MessagePattern({ cmd: 'get-workspace-forum-messages' })
+  getWorkspaceForumMessages(data: { workspaceId: string }) {
+    return this.workspacesService.getWorkspaceForumMessages(data.workspaceId);
+  }
+
+  @MessagePattern({ cmd: 'create-workspace-forum-message' })
+  createWorkspaceForumMessage(data: {
+    workspaceId: string;
+    authorId: string;
+    content: string;
+    parentMessageId?: string;
+  }) {
+    return this.workspacesService.createWorkspaceForumMessage(data);
+  }
+
+  @MessagePattern({ cmd: 'toggle-workspace-forum-message-like' })
+  toggleWorkspaceForumMessageLike(data: {
+    workspaceId: string;
+    messageId: string;
+    userId: string;
+  }) {
+    return this.workspacesService.toggleWorkspaceForumMessageLike(data);
+  }
+
+  @MessagePattern({ cmd: 'pin-workspace-forum-message' })
+  pinWorkspaceForumMessage(data: {
+    workspaceId: string;
+    messageId: string;
+    userId: string;
+  }) {
+    return this.workspacesService.pinWorkspaceForumMessage(data);
+  }
 }
