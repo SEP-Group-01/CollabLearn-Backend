@@ -29,7 +29,7 @@ async function bootstrap() {
     options: {
       client: {
         clientId: 'api-gateway-microservice',
-        brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'], // Replace with localhost:9093 for local dev
+        brokers: [configService.get('KAFKA_BROKERS') || 'localhost:9092'],
       },
       consumer: {
         groupId: 'gateway-reply-consumer',
@@ -52,7 +52,7 @@ async function bootstrap() {
   logger.log('📩 Kafka microservice configured for reply handling');
   logger.log('📩 Kafka client configured via ClientsModule');
   logger.log(
-    '🔗 WebSocket adapter configured for document and forum collaboration',
+    '🔗 WebSocket adapter configured for document, forum, and quiz collaboration',
   );
 }
-bootstrap();
+void bootstrap();
