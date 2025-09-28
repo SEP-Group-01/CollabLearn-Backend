@@ -8,8 +8,10 @@ import { KafkaService } from './services/kafka.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { DocumentEditorController } from './controllers/document-editor.controller';
+import { QuizController } from './controllers/quiz.controller';
 import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 import { ForumGateway } from './gateways/forum.gateway';
+import { QuizGateway } from './gateways/quiz.gateway';
 
 @Module({
   imports: [
@@ -45,6 +47,13 @@ import { ForumGateway } from './gateways/forum.gateway';
         options: { host: 'localhost', port: 3006 }, // DOCUMENT_EDITOR_SERVICE_PORT
       },
     ]),
+    ClientsModule.register([
+      {
+        name: 'QUIZ_SERVICE',
+        transport: Transport.TCP,
+        options: { host: 'localhost', port: 3007 }, // QUIZ_SERVICE_PORT
+      },
+    ]),
     ClientsModule.registerAsync([
       {
         name: 'KAFKA_SERVICE',
@@ -70,10 +79,11 @@ import { ForumGateway } from './gateways/forum.gateway';
     AuthController,
     WorkspacesController,
     QueryController,
-    ForumController, // Add forum controller
-    DocumentEditorController, // Add document editor controller
+    ForumController,
+    DocumentEditorController,
+    QuizController,
     KafkaReplyController,
   ],
-  providers: [KafkaService, DocumentEditorGateway, ForumGateway],
+  providers: [KafkaService, DocumentEditorGateway, ForumGateway, QuizGateway],
 })
 export class AppModule {}

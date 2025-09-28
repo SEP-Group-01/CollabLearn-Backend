@@ -25,6 +25,17 @@ export class QuizService {
   ) {
     const supabase = this.supabaseService.getClient();
 
+    console.log('Creating quiz with data:', {
+      createQuizDto,
+      userId,
+      workspaceId,
+    });
+
+    // Validate that questions exist
+    if (!createQuizDto.questions || !Array.isArray(createQuizDto.questions)) {
+      throw new Error('Questions array is required and must be an array');
+    }
+
     // Calculate total marks
     const totalMarks = createQuizDto.questions.reduce(
       (sum, q) => sum + q.marks,
