@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { WorkspacesController } from './workspaces-service.controller';
-import { WorkspacesService } from './workspaces.service';
-import { SupabaseService } from './supabase.service';
+import { WorkspacesController } from './controllers/workspaces-service.controller';
+import { WorkspacesService } from './services/workspaces.service';
+import { SupabaseService } from './services/supabase.service';
 
 @Module({
   imports: [

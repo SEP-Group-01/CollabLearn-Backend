@@ -7,6 +7,7 @@ import {
   Body,
   HttpException,
   HttpStatus,
+  Headers,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
@@ -138,6 +139,41 @@ export class AuthController {
       throw new HttpException(
         error.message,
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('validate-token')
+  async validateToken(
+    @Headers('authorization') authHeader: string,
+    @Body() body?: { token?: string },
+  ) {
+    let token: string;
+
+    // Extract token from Authorization header or body
+    if (authHeader) {
+      // Remove 'Bearer ' prefix if present
+      token = authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : authHeader;
+    } else if (body?.token) {
+      token = body.token;
+    } else {
+      throw new HttpException(
+        'Token is required in Authorization header or request body',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Token validation attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'validate_token' }, { token }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.UNAUTHORIZED,
       );
     }
   }
