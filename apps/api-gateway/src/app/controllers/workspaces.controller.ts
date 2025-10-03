@@ -349,8 +349,8 @@ export class WorkspacesController {
     }
   }
 
-  @Post('invite')
-  async sendInvite(
+  @Post('validate-email')
+  async validateEmail(
     @Body() body: { workspaceId: string; email: string },
     @Headers('authorization') authHeader: string,
   ) {
@@ -358,7 +358,7 @@ export class WorkspacesController {
       const tokenValidation = await this.validateAuthToken(authHeader);
       const result = await firstValueFrom(
         this.workspacesService.send(
-          { cmd: 'send-invite' },
+          { cmd: 'validate-email' },
           {
             userId: tokenValidation.user.id,
             workspaceId: body.workspaceId,
@@ -372,7 +372,136 @@ export class WorkspacesController {
         throw error;
       }
       throw new HttpException(
-        'Error sending invite',
+        'Error validating email',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('bulk-invite')
+  async sendBulkInvites(
+    @Body() body: { workspaceId: string; emails: string[] },
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'bulk-invite' },
+          {
+            userId: tokenValidation.user.id,
+            workspaceId: body.workspaceId,
+            emails: body.emails,
+          },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error sending bulk invites',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('accept-invite')
+  async acceptInvite(
+    @Body() body: { workspaceId: string },
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'accept-invite' },
+          { userId: tokenValidation.user.id, workspaceId: body.workspaceId },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error accepting invite',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('decline-invite')
+  async declineInvite(
+    @Body() body: { workspaceId: string },
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'decline-invite' },
+          { userId: tokenValidation.user.id, workspaceId: body.workspaceId },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error declining invite',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get(':workspaceId/invites')
+  async getWorkspaceInvites(
+    @Param('workspaceId') workspaceId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'get-workspace-invites' },
+          { userId: tokenValidation.user.id, workspaceId },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error getting workspace invites',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Delete('invites/:inviteId')
+  async deleteInvite(
+    @Param('inviteId') inviteId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'delete-invite' },
+          { userId: tokenValidation.user.id, inviteId },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error deleting invite',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

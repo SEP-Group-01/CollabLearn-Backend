@@ -31,6 +31,19 @@ async function bootstrap() {
   console.log('   - get-workspaces-by-search-term');
   console.log('   - update-workspace');
   console.log('   - join-workspace');
+  console.log('   - leave-workspace');
   console.log('   - request-workspace');
+  console.log('   - cancel-join-request');
+  console.log('   - validate-email');
+  console.log('   - bulk-invite');
+  console.log('   - accept-invite');
+  console.log('   - decline-invite');
+  console.log('   - get-workspace-invites');
+  console.log('   - delete-invite');
+  console.log('   - get-threads-by-workspace-id');
+  console.log('   - get-workspace-forum-messages');
+  console.log('   - create-workspace-forum-message');
+  console.log('   - toggle-workspace-forum-message-like');
+  console.log('   - pin-workspace-forum-message');
 }
 bootstrap();
