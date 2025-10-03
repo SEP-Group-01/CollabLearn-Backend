@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { WorkspacesController } from './controllers/workspaces-service.controller';
 import { WorkspacesService } from './services/workspaces.service';
+import { WorkspaceUserService } from './services/workspace-user.service';
+import { WorkspaceForumService } from './services/workspace-forum.service';
 import { SupabaseService } from './services/supabase.service';
 
 @Module({
@@ -23,6 +25,11 @@ import { SupabaseService } from './services/supabase.service';
     ]),
   ],
   controllers: [WorkspacesController],
-  providers: [WorkspacesService, SupabaseService],
+  providers: [
+    WorkspacesService,
+    WorkspaceUserService,
+    WorkspaceForumService,
+    SupabaseService,
+  ],
 })
 export class WorkspacesServiceModule {}

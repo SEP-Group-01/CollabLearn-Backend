@@ -110,6 +110,28 @@ export class WorkspacesService {
       return 'member';
     }
 
+    // Check if user is invited
+    // Get the user's email
+    const userEmail = await this.getUserEmailById(userId);
+    if (!userEmail) {
+      console.log('❌ [WorkspaceService] User email not found');
+      return 'user';
+    }
+
+    // Check for invite using the email
+    const { data: inviteData, error: inviteError } = await this.supabaseService
+      .getClient()
+      .from('invites')
+      .select('status')
+      .eq('email', userEmail)
+      .eq('workspace_id', workspaceId)
+      .single();
+
+    if (!inviteError && inviteData && inviteData.status != 'Accepted') {
+      console.log('✅ [WorkspaceService] User is invited');
+      return 'invited';
+    }
+
     // Check if user has requested to join
     const { data: requestData, error: requestError } =
       await this.supabaseService
@@ -125,22 +147,74 @@ export class WorkspacesService {
       return 'requested';
     }
 
-    // Check if user is invited
-    const { data: inviteData, error: inviteError } = await this.supabaseService
+    console.log('✅ [WorkspaceService] User is regular user');
+    return 'user';
+  }
+
+  // Helper method to check if user is admin of workspace
+  private async isUserWorkspaceAdmin(
+    userId: string,
+    workspaceId: string,
+  ): Promise<boolean> {
+    console.log(
+      `🔐 [WorkspaceService] Checking admin status for user ${userId} in workspace ${workspaceId}`,
+    );
+
+    const { data: adminData, error: adminError } = await this.supabaseService
       .getClient()
-      .from('invites')
+      .from('workspace_admins')
       .select('user_id')
       .eq('user_id', userId)
       .eq('workspace_id', workspaceId)
       .single();
 
-    if (!inviteError && inviteData) {
-      console.log('✅ [WorkspaceService] User is invited');
-      return 'invited';
+    if (adminError && adminError.code !== 'PGRST116') {
+      // PGRST116 means no rows found, which is fine
+      console.error(
+        '❌ [WorkspaceService] Error checking admin status:',
+        adminError,
+      );
+      throw new RpcException({
+        status: 500,
+        message: 'Error checking admin status',
+      });
     }
 
-    console.log('✅ [WorkspaceService] User is regular user');
-    return 'user';
+    const isAdmin = !adminError && !!adminData;
+    console.log(
+      `${isAdmin ? '✅' : '❌'} [WorkspaceService] User ${isAdmin ? 'is' : 'is not'} admin`,
+    );
+    return isAdmin;
+  }
+
+  // Helper method to get user email by ID
+  private async getUserEmailById(userId: string): Promise<string | null> {
+    console.log(`📧 [WorkspaceService] Getting email for user ID: ${userId}`);
+
+    const { data: userData, error: userError } = await this.supabaseService
+      .getClient()
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      if (userError.code === 'PGRST116') {
+        console.log('❌ [WorkspaceService] User not found');
+        return null;
+      }
+      console.error(
+        '❌ [WorkspaceService] Error fetching user email:',
+        userError,
+      );
+      throw new RpcException({
+        status: 500,
+        message: 'Error fetching user email',
+      });
+    }
+
+    console.log('✅ [WorkspaceService] User email retrieved:', userData.email);
+    return userData.email;
   }
 
   async getWorkspaceById(id: string, userId?: string) {
@@ -611,60 +685,480 @@ export class WorkspacesService {
     }
   }
 
-  async joinWorkspace(userId: string, workspaceId: string) {
+  async validateEmail(userId: string, workspaceId: string, email: string) {
     console.log(
-      '🚪 [WorkspaceService] joinWorkspace called with userId:',
+      '🔍 [WorkspaceService] validateEmail called with userId:',
       userId,
       'workspaceId:',
       workspaceId,
+      'email:',
+      email,
     );
-    // join workspace logic Implement krla na thama
+
     try {
+      // Check if the user is an admin of the workspace
+      const isAdmin = await this.isUserWorkspaceAdmin(userId, workspaceId);
+      if (!isAdmin) {
+        console.log('❌ [WorkspaceService] User is not admin, access denied');
+        throw new RpcException({
+          status: 403,
+          message: 'Only workspace admins can validate emails for invites',
+        });
+      }
+
+      // Check if workspace exists
+      const { data: workspaceData, error: workspaceError } =
+        await this.supabaseService
+          .getClient()
+          .from('workspaces')
+          .select('id, title')
+          .eq('id', workspaceId)
+          .single();
+
+      if (workspaceError) {
+        console.error(
+          '❌ [WorkspaceService] Error checking workspace:',
+          workspaceError,
+        );
+        throw new RpcException({
+          status: 404,
+          message: 'Workspace not found',
+        });
+      }
+
+      // Validate the email
+      const validationResult = await this.validateSingleEmail(
+        email,
+        workspaceId,
+      );
+
       const result = {
         success: true,
-        message: 'User joined workspace successfully',
-        userId,
+        ...validationResult,
         workspaceId,
+        workspaceTitle: workspaceData.title,
       };
-      console.log(
-        '✅ [WorkspaceService] joinWorkspace completed (placeholder):',
-        result,
-      );
+
+      console.log('✅ [WorkspaceService] validateEmail completed:', result);
       return result;
     } catch (error) {
-      console.error('❌ [WorkspaceService] Error joining workspace:', error);
+      console.error('❌ [WorkspaceService] Error validating email:', error);
+      if (error instanceof RpcException) {
+        throw error;
+      }
       throw new RpcException({
         status: 500,
-        message: 'Error joining workspace',
+        message: 'Error validating email',
       });
     }
   }
 
-  async requestWorkspace(userId: string, workspaceId: string) {
+  // Helper method to validate a single email
+  private async validateSingleEmail(email: string, workspaceId: string) {
+    const result = {
+      email,
+      isValid: this.isValidEmail(email),
+      existsInOrganization: false,
+      isWorkspaceMember: false,
+      canInvite: false,
+      warning: '',
+    };
+
+    if (!result.isValid) {
+      result.warning = 'Invalid email format';
+      return result;
+    }
+
+    // Check if email exists in users table
+    const { data: userData, error: userError } = await this.supabaseService
+      .getClient()
+      .from('users')
+      .select('id, email')
+      .eq('email', email)
+      .single();
+
+    if (userError && userError.code !== 'PGRST116') {
+      console.error('❌ [WorkspaceService] Error checking user:', userError);
+      result.warning = 'Error checking user existence';
+      return result;
+    }
+
+    if (!userData) {
+      result.warning = 'Email is not in the organization';
+      return result;
+    }
+
+    result.existsInOrganization = true;
+
+    // Check if user is already a workspace member
+    const { data: memberData, error: memberError } = await this.supabaseService
+      .getClient()
+      .from('workspace_members')
+      .select('user_id')
+      .eq('user_id', userData.id)
+      .eq('workspace_id', workspaceId)
+      .single();
+
+    if (memberError && memberError.code !== 'PGRST116') {
+      console.error(
+        '❌ [WorkspaceService] Error checking membership:',
+        memberError,
+      );
+      result.warning = 'Error checking workspace membership';
+      return result;
+    }
+
+    if (memberData) {
+      result.isWorkspaceMember = true;
+      result.warning = 'Email is already a member of the workspace';
+      return result;
+    }
+
+    // Check if user already has a pending invite
+    const { data: inviteData, error: inviteError } = await this.supabaseService
+      .getClient()
+      .from('invites')
+      .select('*')
+      .eq('email', email)
+      .eq('workspace_id', workspaceId)
+      .single();
+
+    if (inviteError && inviteError.code !== 'PGRST116') {
+      console.error(
+        '❌ [WorkspaceService] Error checking existing invite:',
+        inviteError,
+      );
+      result.warning = 'Error checking existing invites';
+      return result;
+    }
+
+    if (inviteData) {
+      result.warning = 'Email already has a pending invite';
+      return result;
+    }
+
+    // Email can be invited
+    result.canInvite = true;
+    return result;
+  }
+
+  // Helper method to validate email format
+  private isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  async sendBulkInvites(userId: string, workspaceId: string, emails: string[]) {
     console.log(
-      '📨 [WorkspaceService] requestWorkspace called with userId:',
+      '📧 [WorkspaceService] sendBulkInvites called with userId:',
+      userId,
+      'workspaceId:',
+      workspaceId,
+      'emails:',
+      emails,
+    );
+
+    try {
+      // Check if the user is an admin of the workspace
+      const isAdmin = await this.isUserWorkspaceAdmin(userId, workspaceId);
+      if (!isAdmin) {
+        console.log('❌ [WorkspaceService] User is not admin, access denied');
+        throw new RpcException({
+          status: 403,
+          message: 'Only workspace admins can send bulk invites',
+        });
+      }
+
+      // Check if workspace exists
+      const { data: workspaceData, error: workspaceError } =
+        await this.supabaseService
+          .getClient()
+          .from('workspaces')
+          .select('id, title')
+          .eq('id', workspaceId)
+          .single();
+
+      if (workspaceError) {
+        console.error(
+          '❌ [WorkspaceService] Error checking workspace:',
+          workspaceError,
+        );
+        throw new RpcException({
+          status: 404,
+          message: 'Workspace not found',
+        });
+      }
+
+      // First validate all emails to ensure they can be invited
+      const validationResults = await Promise.all(
+        emails.map(async (email) => {
+          return this.validateSingleEmail(email, workspaceId);
+        }),
+      );
+
+      const invitableEmails = validationResults
+        .filter((result) => result.canInvite)
+        .map((result) => result.email);
+
+      if (invitableEmails.length === 0) {
+        return {
+          success: false,
+          message: 'No valid emails to invite',
+          sentInvites: [],
+          failedInvites: validationResults,
+          workspaceId,
+          workspaceTitle: workspaceData.title,
+        };
+      }
+
+      // Create invites for valid emails
+      const invitePromises = invitableEmails.map(async (email) => {
+        try {
+          const { data: inviteData, error: insertError } =
+            await this.supabaseService
+              .getClient()
+              .from('invites')
+              .insert([
+                {
+                  workspace_id: workspaceId,
+                  email: email,
+                  invited_by: userId,
+                  status: 'Pending',
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                },
+              ])
+              .select()
+              .single();
+
+          if (insertError) {
+            console.error(
+              `❌ [WorkspaceService] Error creating invite for ${email}:`,
+              insertError,
+            );
+            return {
+              email,
+              success: false,
+              error: 'Failed to create invite',
+            };
+          }
+
+          return {
+            email,
+            success: true,
+            invite: inviteData,
+          };
+        } catch (error) {
+          console.error(
+            `❌ [WorkspaceService] Unexpected error for ${email}:`,
+            error,
+          );
+          return {
+            email,
+            success: false,
+            error: 'Unexpected error occurred',
+          };
+        }
+      });
+
+      const inviteResults = await Promise.all(invitePromises);
+      const sentInvites = inviteResults.filter((result) => result.success);
+      const failedInvites = inviteResults.filter((result) => !result.success);
+
+      // Combine validation failures with invite creation failures
+      const allFailedInvites = [
+        ...validationResults.filter((result) => !result.canInvite),
+        ...failedInvites.map((result) => ({
+          email: result.email,
+          isValid: true,
+          existsInOrganization: true,
+          isWorkspaceMember: false,
+          canInvite: false,
+          warning: result.error,
+        })),
+      ];
+
+      const result = {
+        success: sentInvites.length > 0,
+        message: `Successfully sent ${sentInvites.length} invites`,
+        sentInvites: sentInvites.map((invite) => invite.invite),
+        failedInvites: allFailedInvites,
+        workspaceId,
+        workspaceTitle: workspaceData.title,
+        stats: {
+          total: emails.length,
+          sent: sentInvites.length,
+          failed: allFailedInvites.length,
+        },
+      };
+
+      console.log('✅ [WorkspaceService] sendBulkInvites completed:', {
+        ...result,
+        sentInvites: `${result.sentInvites.length} invites`,
+        failedInvites: `${result.failedInvites.length} failed`,
+      });
+      return result;
+    } catch (error) {
+      console.error('❌ [WorkspaceService] Error sending bulk invites:', error);
+      if (error instanceof RpcException) {
+        throw error;
+      }
+      throw new RpcException({
+        status: 500,
+        message: 'Error sending bulk invites',
+      });
+    }
+  }
+
+  async getWorkspaceInvites(userId: string, workspaceId: string) {
+    console.log(
+      '📋 [WorkspaceService] getWorkspaceInvites called with userId:',
       userId,
       'workspaceId:',
       workspaceId,
     );
-    // request workspace logic Implement krla na thama
+
     try {
+      // Check if the user is an admin of the workspace
+      const isAdmin = await this.isUserWorkspaceAdmin(userId, workspaceId);
+      if (!isAdmin) {
+        console.log('❌ [WorkspaceService] User is not admin, access denied');
+        throw new RpcException({
+          status: 403,
+          message: 'Only workspace admins can view invites',
+        });
+      }
+
+      // Get all invites for the workspace
+      const { data: invitesData, error: fetchError } =
+        await this.supabaseService
+          .getClient()
+          .from('invites')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false });
+
+      if (fetchError) {
+        console.error(
+          '❌ [WorkspaceService] Error fetching invites:',
+          fetchError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error fetching workspace invites',
+        });
+      }
+
       const result = {
         success: true,
-        message: 'Workspace request sent successfully',
-        userId,
+        invites: invitesData || [],
         workspaceId,
+        count: invitesData?.length || 0,
       };
+
       console.log(
-        '✅ [WorkspaceService] requestWorkspace completed (placeholder):',
-        result,
+        '✅ [WorkspaceService] getWorkspaceInvites completed, found',
+        result.count,
+        'invites',
       );
       return result;
     } catch (error) {
-      console.error('❌ [WorkspaceService] Error requesting workspace:', error);
+      console.error(
+        '❌ [WorkspaceService] Error getting workspace invites:',
+        error,
+      );
+      if (error instanceof RpcException) {
+        throw error;
+      }
       throw new RpcException({
         status: 500,
-        message: 'Error requesting workspace',
+        message: 'Error getting workspace invites',
+      });
+    }
+  }
+
+  async deleteInvite(userId: string, inviteId: string) {
+    console.log(
+      '🗑️ [WorkspaceService] deleteInvite called with userId:',
+      userId,
+      'inviteId:',
+      inviteId,
+    );
+
+    try {
+      // First, get the invite to check workspace ownership
+      const { data: inviteData, error: fetchError } = await this.supabaseService
+        .getClient()
+        .from('invites')
+        .select('workspace_id, email')
+        .eq('id', inviteId)
+        .single();
+
+      if (fetchError) {
+        console.error(
+          '❌ [WorkspaceService] Error fetching invite:',
+          fetchError,
+        );
+        if (fetchError.code === 'PGRST116') {
+          throw new RpcException({
+            status: 404,
+            message: 'Invite not found',
+          });
+        }
+        throw new RpcException({
+          status: 500,
+          message: 'Error fetching invite',
+        });
+      }
+
+      // Check if the user is an admin of the workspace
+      const isAdmin = await this.isUserWorkspaceAdmin(
+        userId,
+        inviteData.workspace_id,
+      );
+      if (!isAdmin) {
+        console.log('❌ [WorkspaceService] User is not admin, access denied');
+        throw new RpcException({
+          status: 403,
+          message: 'Only workspace admins can delete invites',
+        });
+      }
+
+      // Delete the invite
+      const { error: deleteError } = await this.supabaseService
+        .getClient()
+        .from('invites')
+        .delete()
+        .eq('id', inviteId);
+
+      if (deleteError) {
+        console.error(
+          '❌ [WorkspaceService] Error deleting invite:',
+          deleteError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error deleting invite',
+        });
+      }
+
+      const result = {
+        success: true,
+        message: 'Invite deleted successfully',
+        inviteId,
+        workspaceId: inviteData.workspace_id,
+      };
+
+      console.log('✅ [WorkspaceService] deleteInvite completed:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ [WorkspaceService] Error deleting invite:', error);
+      if (error instanceof RpcException) {
+        throw error;
+      }
+      throw new RpcException({
+        status: 500,
+        message: 'Error deleting invite',
       });
     }
   }
