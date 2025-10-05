@@ -3,8 +3,9 @@ import { ForumAndNotificationServiceService } from './forum-and-notification-ser
 
 @Controller()
 export class ForumAndNotificationServiceController {
-  constructor(private readonly forumAndNotificationServiceService: ForumAndNotificationServiceService) {}
-
+  constructor(
+    private readonly forumAndNotificationServiceService: ForumAndNotificationServiceService,
+  ) {}
   @Get()
   getHello(): string {
     return this.forumAndNotificationServiceService.getHello();
