@@ -19,18 +19,22 @@ export class QuizServiceController {
       createQuizDto: CreateQuizDto;
       userId: string;
       workspaceId: string;
+      threadId: string;
     },
   ) {
     return this.quizService.createQuiz(
       data.createQuizDto,
       data.userId,
       data.workspaceId,
+      data.threadId,
     );
   }
 
   @MessagePattern({ cmd: 'list_quizzes' })
-  async listQuizzes(@Payload() data: { workspaceId: string }) {
-    return this.quizService.listQuizzes(data.workspaceId);
+  async listQuizzes(
+    @Payload() data: { workspaceId?: string; threadId?: string },
+  ) {
+    return this.quizService.listQuizzes(data.workspaceId, data.threadId);
   }
 
   @MessagePattern({ cmd: 'get_quiz' })
@@ -55,6 +59,13 @@ export class QuizServiceController {
 
   @MessagePattern({ cmd: 'view_results' })
   async viewResults(@Payload() data: { quizId: string; userId: string }) {
+    return this.quizService.viewResults(data.quizId, data.userId);
+  }
+
+  // Backwards-compatible handler: API gateway sends 'get_quiz_attempts'
+  // forward to the same service method that returns attempts/results
+  @MessagePattern({ cmd: 'get_quiz_attempts' })
+  async getQuizAttempts(@Payload() data: { quizId: string; userId: string }) {
     return this.quizService.viewResults(data.quizId, data.userId);
   }
 

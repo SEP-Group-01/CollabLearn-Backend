@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
 import { WorkspacesController } from './controllers/workspaces.controller';
+import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
 import { ForumController } from './controllers/forum.controller';
 import { KafkaService } from './services/kafka.service';
@@ -30,7 +31,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3005 }, // WORKSPACES_SERVICE_PORT (corrected port)
+        options: { host: 'localhost', port: 3003 }, // WORKSPACES_SERVICE_PORT (corrected port)
       },
     ]),
     ClientsModule.register([
@@ -78,6 +79,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
   controllers: [
     AuthController,
     WorkspacesController,
+    ThreadsController,
     QueryController,
     ForumController,
     DocumentEditorController,

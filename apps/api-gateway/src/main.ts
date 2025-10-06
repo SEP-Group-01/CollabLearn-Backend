@@ -37,6 +37,9 @@ async function bootstrap() {
     },
   });
 
+  // Set global prefix for all REST endpoints
+  app.setGlobalPrefix('api');
+
   // WebSocket Adapter - Using Socket.IO for namespace support
   app.useWebSocketAdapter(new IoAdapter(app));
 

@@ -55,6 +55,11 @@ export class AuthController {
     return this.authService.validateUser(data.userId);
   }
 
+  @MessagePattern({ cmd: 'validate_token' })
+  async validateToken(@Payload() data: { token: string }) {
+    return this.authService.validateToken(data.token);
+  }
+
   @Get()
   getHello(): string {
     return this.authService.getHello();

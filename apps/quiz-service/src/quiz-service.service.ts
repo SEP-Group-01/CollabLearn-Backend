@@ -22,6 +22,7 @@ export class QuizService {
     createQuizDto: CreateQuizDto,
     userId: string,
     workspaceId: string,
+    threadId?: string,
   ) {
     const supabase = this.supabaseService.getClient();
 
@@ -29,6 +30,7 @@ export class QuizService {
       createQuizDto,
       userId,
       workspaceId,
+      threadId,
     });
 
     // Validate that questions exist
@@ -42,19 +44,26 @@ export class QuizService {
       0,
     );
 
-    // Insert quiz
+    // Insert quiz into the new `quizzes` table
+    const insertPayload: Record<string, unknown> = {
+      title: createQuizDto.title,
+      description: createQuizDto.description,
+      time_allocated: createQuizDto.timeAllocated,
+      total_marks: totalMarks,
+      // keep optional arrays if present in schema
+      tags: createQuizDto.tags,
+      resource_tags: createQuizDto.resourceTags,
+      creator_id: userId,
+      workspace_id: workspaceId,
+    };
+
+    if (threadId) {
+      insertPayload['thread_id'] = threadId;
+    }
+
     const { data: quiz, error: quizError } = await supabase
-      .from('quiz_quizzes')
-      .insert({
-        title: createQuizDto.title,
-        description: createQuizDto.description,
-        time_allocated: createQuizDto.timeAllocated,
-        total_marks: totalMarks,
-        tags: createQuizDto.tags,
-        resource_tags: createQuizDto.resourceTags,
-        creator_id: userId,
-        workspace_id: workspaceId,
-      })
+      .from('quizzes')
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -64,12 +73,14 @@ export class QuizService {
 
     // Insert questions and options
     for (const questionDto of createQuizDto.questions) {
+      // Insert question into the new `questions` table.
+      // The DB column is named `question` in the target schema, so we map questionText -> question
       const { data: question, error: questionError } = await supabase
-        .from('quiz_questions')
+        .from('questions')
         .insert({
           quiz_id: quiz.id,
-          question_text: questionDto.questionText,
-          image: questionDto.image,
+          question: questionDto.questionText,
+          attachment_url: questionDto.image ?? null,
           marks: questionDto.marks,
         })
         .select()
@@ -80,7 +91,8 @@ export class QuizService {
       }
 
       // Insert options
-      for (const optionDto of questionDto.options) {
+      // Insert options (keep using quiz_options table)
+      for (const optionDto of questionDto.options || []) {
         const { error: optionError } = await supabase
           .from('quiz_options')
           .insert({
@@ -99,17 +111,16 @@ export class QuizService {
     return { success: true, quiz };
   }
 
-  async listQuizzes(workspaceId: string) {
+  async listQuizzes(workspaceId?: string, threadId?: string) {
     const supabase = this.supabaseService.getClient();
-
-    const { data: quizzes, error } = await supabase
-      .from('quiz_quizzes')
-      .select(
-        `
+    // Query quizzes from `quizzes` and include nested questions + options
+    let query = supabase.from('quizzes').select(
+      `
         *,
-        quiz_questions (
+        questions (
           id,
-          question_text,
+          question,
+          attachment_url,
           marks,
           quiz_options (
             id,
@@ -118,28 +129,54 @@ export class QuizService {
           )
         )
       `,
-      )
-      .eq('workspace_id', workspaceId);
+    );
+
+    // Apply filters if provided. If both provided, filter by both.
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    }
+
+    if (threadId) {
+      query = query.eq('thread_id', threadId);
+    }
+
+    const { data: quizzes, error } = await query;
 
     if (error) {
       throw new Error(`Failed to fetch quizzes: ${error.message}`);
     }
 
-    return quizzes;
+    // Normalize returned shape so frontend still sees quiz_questions.question_text
+    const normalized = (quizzes || []).map((q: any) => {
+      const questions = (q.questions || []).map((qq: any) => ({
+        id: qq.id,
+        question_text: qq.question ?? qq.question_text,
+        image: qq.attachment_url ?? qq.image,
+        marks: qq.marks,
+        quiz_options: qq.quiz_options || [],
+      }));
+
+      return {
+        ...q,
+        quiz_questions: questions,
+      };
+    });
+
+    return normalized;
   }
 
   async getQuiz(quizId: string) {
     const supabase = this.supabaseService.getClient();
 
     const { data: quiz, error } = await supabase
-      .from('quiz_quizzes')
+      .from('quizzes')
       .select(
         `
         *,
-        quiz_questions (
+        questions (
           id,
-          question_text,
-          image,
+          question,
+          attachment_url,
           marks,
           quiz_options (
             id,
@@ -151,13 +188,31 @@ export class QuizService {
       `,
       )
       .eq('id', quizId)
-      .single();
+      .maybeSingle();
 
     if (error) {
+      // Supabase error while querying
       throw new NotFoundException(`Quiz not found: ${error.message}`);
     }
 
-    return quiz;
+    if (!quiz) {
+      // No quiz found with that id
+      throw new NotFoundException('Quiz not found');
+    }
+
+    // Normalize shape to previous API (quiz_questions with question_text)
+    const normalizedQuestions = (quiz.questions || []).map((qq: any) => ({
+      id: qq.id,
+      question_text: qq.question ?? qq.question_text,
+      image: qq.attachment_url ?? qq.image,
+      marks: qq.marks,
+      quiz_options: qq.quiz_options || [],
+    }));
+
+    return {
+      ...quiz,
+      quiz_questions: normalizedQuestions,
+    };
   }
 
   async startQuiz(startQuizDto: StartQuizDto) {
@@ -171,7 +226,7 @@ export class QuizService {
 
     // Check if user already has an active attempt
     const { data: existingAttempt } = await supabase
-      .from('quiz_attempts')
+      .from('quiz_attempt')
       .select('*')
       .eq('quiz_id', startQuizDto.quizId)
       .eq('user_id', startQuizDto.userId)
@@ -186,7 +241,7 @@ export class QuizService {
       if (now > expiresAt) {
         // Attempt has expired, mark as expired
         await supabase
-          .from('quiz_attempts')
+          .from('quiz_attempt')
           .update({ status: 'expired' })
           .eq('id', existingAttempt.id);
 
@@ -228,7 +283,7 @@ export class QuizService {
     const expiresAt = new Date(now.getTime() + quiz.time_allocated * 60 * 1000); // Convert minutes to milliseconds
 
     const { data: attempt, error } = await supabase
-      .from('quiz_attempts')
+      .from('quiz_attempt')
       .insert({
         quiz_id: startQuizDto.quizId,
         user_id: startQuizDto.userId,
@@ -315,7 +370,7 @@ export class QuizService {
 
     // Get the active attempt
     const { data: attempt, error: attemptError } = await supabase
-      .from('quiz_attempts')
+      .from('quiz_attempt')
       .select('*')
       .eq('id', attemptQuizDto.attemptId)
       .eq('status', 'active')
@@ -368,7 +423,7 @@ export class QuizService {
 
     // Update attempt with submission
     const { data: updatedAttempt, error: updateError } = await supabase
-      .from('quiz_attempts')
+      .from('quiz_attempt')
       .update({
         answers: attemptQuizDto.answers,
         finished_at: now.toISOString(),
@@ -396,7 +451,7 @@ export class QuizService {
     const supabase = this.supabaseService.getClient();
 
     const { data: attempts, error } = await supabase
-      .from('quiz_attempts')
+      .from('quiz_attempt')
       .select('*')
       .eq('quiz_id', quizId)
       .eq('user_id', userId)
