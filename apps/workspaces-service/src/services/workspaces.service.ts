@@ -345,36 +345,83 @@ export class WorkspacesService {
     }
   }
 
-  async getWorkspacesBySearchTerm(searchTerm: string) {
+  async getWorkspacesBySearchTerm(searchTerm: string, userId?: string) {
     console.log(
       '🔍 [WorkspaceService] getWorkspacesBySearchTerm called with searchTerm:',
       searchTerm,
+      'userId:',
+      userId,
     );
-    // I need to replace this with a Stored procedure later
+
     const supabase = this.supabaseService.getClient();
     try {
-      const { data, error } = await supabase
-        .from('workspaces')
-        .select('*')
-        .ilike('title', `%${searchTerm}%`);
+      let data: any[] = [];
 
-      if (error) {
-        throw error;
+      // Process search term: tokenize, remove stop words, and clean
+      const processedTerms = this.processSearchTerms(searchTerm);
+
+      if (processedTerms.length === 0) {
+        console.log(
+          '✅ [WorkspaceService] No valid search terms after processing',
+        );
+        return [];
       }
 
-      // Fetch tags for each workspace
-      const workspacesWithTags = await Promise.all(
-        (data || []).map(async (workspace) => {
+      console.log(
+        '🔍 [WorkspaceService] Processed search terms:',
+        processedTerms,
+      );
+
+      // Try comprehensive search with processed terms
+      const { data: searchResults, error: searchError } = await supabase.rpc(
+        'search_workspaces_comprehensive_multi',
+        { search_terms: processedTerms },
+      );
+
+      if (searchError) {
+        console.warn(
+          '⚠️ [WorkspaceService] RPC multi-word search failed, falling back to basic search:',
+          searchError,
+        );
+
+        // Fallback to multi-word basic search
+        data = await this.performMultiWordBasicSearch(supabase, processedTerms);
+      } else {
+        data = searchResults || [];
+      }
+
+      if (!data || data.length === 0) {
+        console.log(
+          '✅ [WorkspaceService] No workspaces found for search terms',
+        );
+        return [];
+      }
+
+      // Process results and add required metadata
+      const workspacesWithCompleteData = await Promise.all(
+        data.map(async (workspace) => {
           const workspaceTags = await this.getWorkspaceTags(workspace.id);
           const workspaceAdmins = await this.getWorkspaceAdmins(workspace.id);
+          const membersCount = await this.getWorkspaceMembersCount(
+            workspace.id,
+          );
+
+          // Get user role if userId is provided
+          let userRole = 'user'; // default role
+          if (userId) {
+            userRole = await this.getUserRoleInWorkspace(userId, workspace.id);
+          }
+
           return {
             id: workspace.id,
             title: workspace.title,
             description: workspace.description,
             join_policy: workspace.join_policy,
             admin_ids: workspaceAdmins,
-            tags: workspaceTags, // Use tags from tags table
-            // image: workspace.image, // Commented out since image column doesn't exist in DB
+            tags: workspaceTags,
+            image_url: workspace.image_url || null,
+            members_count: membersCount,
+            role: userRole,
             created_at: workspace.created_at,
             updated_at: workspace.updated_at,
           };
@@ -383,10 +430,10 @@ export class WorkspacesService {
 
       console.log(
         '✅ [WorkspaceService] getWorkspacesBySearchTerm successful, found',
-        workspacesWithTags?.length || 0,
+        workspacesWithCompleteData?.length || 0,
         'workspaces',
       );
-      return workspacesWithTags;
+      return workspacesWithCompleteData;
     } catch (error) {
       console.error(
         '❌ [WorkspaceService] Error fetching workspaces by search term:',
@@ -397,6 +444,124 @@ export class WorkspacesService {
         message: 'Error fetching workspaces by search term',
       });
     }
+  }
+
+  // Helper method to process search terms: tokenize and remove stop words
+  private processSearchTerms(searchTerm: string): string[] {
+    const stopWords = new Set([
+      'the',
+      'a',
+      'an',
+      'and',
+      'or',
+      'but',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'with',
+      'by',
+      'from',
+      'as',
+      'is',
+      'was',
+      'are',
+      'were',
+      'be',
+      'been',
+      'being',
+      'have',
+      'has',
+      'had',
+      'do',
+      'does',
+      'did',
+      'will',
+      'would',
+      'could',
+      'should',
+      'may',
+      'might',
+      'must',
+      'can',
+      'this',
+      'that',
+      'these',
+      'those',
+      'i',
+      'you',
+      'he',
+      'she',
+      'it',
+      'we',
+      'they',
+    ]);
+
+    return searchTerm
+      .toLowerCase()
+      .trim()
+      .split(/\s+/) // Split by whitespace
+      .filter((word) => word.length > 0) // Remove empty strings
+      .map((word) => word.replace(/[^\w]/g, '')) // Remove special characters
+      .filter((word) => word.length >= 2) // Keep words with 2+ characters
+      .filter((word) => !stopWords.has(word)) // Remove stop words
+      .filter((word, index, array) => array.indexOf(word) === index); // Remove duplicates
+  }
+
+  // Helper method to perform multi-word basic search when stored procedure fails
+  private async performMultiWordBasicSearch(
+    supabase: any,
+    searchTerms: string[],
+  ): Promise<any[]> {
+    const allMatchingIds = new Set<string>();
+
+    // Search in workspaces table (title and description)
+    for (const term of searchTerms) {
+      const { data: workspaceMatches } = await supabase
+        .from('workspaces')
+        .select('id')
+        .or(`title.ilike.%${term}%,description.ilike.%${term}%`);
+
+      workspaceMatches?.forEach((w: any) => allMatchingIds.add(w.id));
+    }
+
+    // Search in tags
+    for (const term of searchTerms) {
+      const { data: tagMatches } = await supabase
+        .from('tags')
+        .select('workspace_id')
+        .ilike('tag', `%${term}%`);
+
+      tagMatches?.forEach((t: any) => allMatchingIds.add(t.workspace_id));
+    }
+
+    // Search in threads
+    for (const term of searchTerms) {
+      const { data: threadMatches } = await supabase
+        .from('threads')
+        .select('workspace_id')
+        .or(`name.ilike.%${term}%,description.ilike.%${term}%`);
+
+      threadMatches?.forEach((t: any) => allMatchingIds.add(t.workspace_id));
+    }
+
+    if (allMatchingIds.size === 0) {
+      return [];
+    }
+
+    // Fetch full workspace data for all matches
+    const { data: allWorkspaces, error: finalError } = await supabase
+      .from('workspaces')
+      .select('*')
+      .in('id', Array.from(allMatchingIds));
+
+    if (finalError) {
+      throw finalError;
+    }
+
+    return allWorkspaces || [];
   }
 
   async createWorkspace(
@@ -1163,115 +1328,131 @@ export class WorkspacesService {
     }
   }
 
-  // Helper method to get thread subscriber count
-  private async getThreadSubscriberCount(threadId: string): Promise<number> {
+  async getWorkspaceMembers(workspaceId: string, requestingUserId?: string) {
     console.log(
-      `🔢 [WorkspaceService] Counting subscribers for thread ID: ${threadId}`,
-    );
-
-    const { count, error } = await this.supabaseService
-      .getClient()
-      .from('thread_subscribers')
-      .select('*', { count: 'exact', head: true })
-      .eq('thread_id', threadId);
-
-    if (error) {
-      console.warn(
-        '⚠️ [WorkspaceService] Error counting thread subscribers:',
-        error,
-      );
-      return 0;
-    }
-
-    console.log('✅ [WorkspaceService] Thread subscribers count:', count || 0);
-    return count || 0;
-  }
-
-  // Helper method to get thread resource count
-  private async getThreadResourceCount(threadId: string): Promise<number> {
-    console.log(
-      `📚 [WorkspaceService] Counting resources for thread ID: ${threadId}`,
-    );
-
-    const { count, error } = await this.supabaseService
-      .getClient()
-      .from('study_resources')
-      .select('*', { count: 'exact', head: true })
-      .eq('thread_id', threadId);
-
-    if (error) {
-      console.warn(
-        '⚠️ [WorkspaceService] Error counting thread resources:',
-        error,
-      );
-      return 0;
-    }
-
-    console.log('✅ [WorkspaceService] Thread resources count:', count || 0);
-    return count || 0;
-  }
-
-  async getThreadsByWorkspaceId(workspaceId: string) {
-    console.log(
-      '🧵 [WorkspaceService] getThreadsByWorkspaceId called with workspaceId:',
+      '👥 [WorkspaceService] getWorkspaceMembers called for workspace:',
       workspaceId,
+      'by user:',
+      requestingUserId,
     );
-    const supabase = this.supabaseService.getClient();
 
     try {
-      // Fetch threads for the workspace
-      const { data: threadsData, error: threadsError } = await supabase
-        .from('threads')
-        .select('*')
-        .eq('workspace_id', workspaceId);
+      // Check if the requesting user has access to view members (must be admin or member)
+      if (requestingUserId) {
+        const userRole = await this.getUserRoleInWorkspace(
+          requestingUserId,
+          workspaceId,
+        );
+        if (userRole !== 'admin' && userRole !== 'member') {
+          console.log(
+            '❌ [WorkspaceService] User does not have access to view workspace members',
+          );
+          throw new RpcException({
+            status: 403,
+            message:
+              'Access denied. You must be a member to view workspace members.',
+          });
+        }
+      }
 
-      if (threadsError) {
+      // Get all workspace members
+      const { data: membersData, error: membersError } =
+        await this.supabaseService
+          .getClient()
+          .from('workspace_members')
+          .select('user_id')
+          .eq('workspace_id', workspaceId);
+
+      if (membersError) {
         console.error(
-          '❌ [WorkspaceService] Error fetching threads:',
-          threadsError,
+          '❌ [WorkspaceService] Error fetching workspace members:',
+          membersError,
         );
         throw new RpcException({
           status: 500,
-          message: `Error fetching threads: ${threadsError.message}`,
+          message: 'Error fetching workspace members',
         });
       }
 
-      if (!threadsData || threadsData.length === 0) {
-        console.log('📋 [WorkspaceService] No threads found for workspace');
+      // Get all workspace admins
+      const { data: adminsData, error: adminsError } =
+        await this.supabaseService
+          .getClient()
+          .from('workspace_admins')
+          .select('user_id')
+          .eq('workspace_id', workspaceId);
+
+      if (adminsError) {
+        console.error(
+          '❌ [WorkspaceService] Error fetching workspace admins:',
+          adminsError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error fetching workspace admins',
+        });
+      }
+
+      // Collect all unique user IDs
+      const memberUserIds = membersData?.map((member) => member.user_id) || [];
+      const adminUserIds = adminsData?.map((admin) => admin.user_id) || [];
+      const allUserIds = [...new Set([...memberUserIds, ...adminUserIds])];
+
+      if (allUserIds.length === 0) {
+        console.log('ℹ️ [WorkspaceService] No members found for workspace');
         return [];
       }
 
-      // For each thread, get subscriber count and resource count
-      const threadsWithCounts = await Promise.all(
-        threadsData.map(async (thread) => {
-          const subscriberCount = await this.getThreadSubscriberCount(
-            thread.id,
-          );
-          const resourceCount = await this.getThreadResourceCount(thread.id);
+      // Get user details for all members
+      const { data: usersData, error: usersError } = await this.supabaseService
+        .getClient()
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .in('id', allUserIds);
 
-          return {
-            id: thread.id,
-            workspace_id: thread.workspace_id,
-            title: thread.title,
-            description: thread.description,
-            created_by: thread.created_by,
-            created_at: thread.created_at,
-            updated_at: thread.updated_at,
-            subscriber_count: subscriberCount,
-            resource_count: resourceCount,
-          };
-        }),
-      );
+      if (usersError) {
+        console.error(
+          '❌ [WorkspaceService] Error fetching user details:',
+          usersError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error fetching user details',
+        });
+      }
+
+      // Create a map to track admin users
+      const adminUserIdsSet = new Set(adminUserIds);
+
+      // Combine and format the results
+      const members: Array<{
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+      }> = [];
+
+      // Process each user and assign their role
+      if (usersData) {
+        for (const user of usersData) {
+          const role = adminUserIdsSet.has(user.id) ? 'admin' : 'member';
+          members.push({
+            id: user.id,
+            name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+            email: user.email,
+            role: role,
+          });
+        }
+      }
 
       console.log(
-        '✅ [WorkspaceService] getThreadsByWorkspaceId successful, found',
-        threadsWithCounts.length,
-        'threads',
+        '✅ [WorkspaceService] getWorkspaceMembers completed:',
+        `Found ${members.length} members`,
       );
-      return threadsWithCounts;
+      return members;
     } catch (error) {
       console.error(
-        '❌ [WorkspaceService] Error in getThreadsByWorkspaceId:',
+        '❌ [WorkspaceService] Error in getWorkspaceMembers:',
         error,
       );
       if (error instanceof RpcException) {
@@ -1279,7 +1460,7 @@ export class WorkspacesService {
       }
       throw new RpcException({
         status: 500,
-        message: 'Error fetching threads by workspace ID',
+        message: 'Error fetching workspace members',
       });
     }
   }
@@ -1289,5 +1470,281 @@ export class WorkspacesService {
     const response = 'Hello World! from Workspaces Service';
     console.log('✅ [WorkspaceService] getHello returning:', response);
     return response;
+  }
+
+  async getWorkspaceJoinRequests(workspaceId: string, userId: string) {
+    console.log(
+      '📋 [WorkspaceService] getWorkspaceJoinRequests called for workspace:',
+      workspaceId,
+      'by user:',
+      userId,
+    );
+
+    try {
+      // Check if user is admin of the workspace
+      const isAdmin = await this.isUserWorkspaceAdmin(userId, workspaceId);
+      if (!isAdmin) {
+        throw new RpcException({
+          status: 403,
+          message:
+            'Access denied. Only workspace admins can view join requests.',
+        });
+      }
+
+      // Get all pending join requests for the workspace
+      const { data: requestsData, error: requestsError } =
+        await this.supabaseService
+          .getClient()
+          .from('requests')
+          .select(
+            `
+          id,
+          user_id,
+          status,
+          created_at,
+          updated_at,
+          users:user_id (
+            id,
+            email,
+            first_name,
+            last_name
+          )
+        `,
+          )
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'Pending')
+          .order('created_at', { ascending: false });
+
+      if (requestsError) {
+        console.error(
+          '❌ [WorkspaceService] Error fetching join requests:',
+          requestsError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error fetching join requests',
+        });
+      }
+
+      console.log(
+        '✅ [WorkspaceService] getWorkspaceJoinRequests successful, found',
+        requestsData?.length || 0,
+        'requests',
+      );
+      return requestsData || [];
+    } catch (error) {
+      console.error(
+        '❌ [WorkspaceService] Error in getWorkspaceJoinRequests:',
+        error,
+      );
+      if (error instanceof RpcException) {
+        throw error;
+      }
+      throw new RpcException({
+        status: 500,
+        message: 'Error fetching workspace join requests',
+      });
+    }
+  }
+
+  async approveJoinRequest(
+    workspaceId: string,
+    requestId: string,
+    userId: string,
+  ) {
+    console.log(
+      '✅ [WorkspaceService] approveJoinRequest called for workspace:',
+      workspaceId,
+      'request:',
+      requestId,
+      'by user:',
+      userId,
+    );
+
+    try {
+      // Check if user is admin of the workspace
+      const isAdmin = await this.isUserWorkspaceAdmin(userId, workspaceId);
+      if (!isAdmin) {
+        throw new RpcException({
+          status: 403,
+          message:
+            'Access denied. Only workspace admins can approve join requests.',
+        });
+      }
+
+      // Get the join request details
+      const { data: requestData, error: requestError } =
+        await this.supabaseService
+          .getClient()
+          .from('requests')
+          .select('*')
+          .eq('id', requestId)
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'Pending')
+          .single();
+
+      if (requestError || !requestData) {
+        console.error(
+          '❌ [WorkspaceService] Join request not found or already processed:',
+          requestError,
+        );
+        throw new RpcException({
+          status: 404,
+          message: 'Join request not found or already processed',
+        });
+      }
+
+      // Start a transaction to approve the request and add user as member
+      const supabase = this.supabaseService.getClient();
+
+      // Update request status to 'Approved'
+      const { error: updateError } = await supabase
+        .from('requests')
+        .update({
+          status: 'Approved',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId);
+
+      if (updateError) {
+        console.error(
+          '❌ [WorkspaceService] Error updating request status:',
+          updateError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error updating request status',
+        });
+      }
+
+      // Add user as workspace member
+      const { error: memberError } = await supabase
+        .from('workspace_members')
+        .insert([
+          {
+            workspace_id: workspaceId,
+            user_id: requestData.user_id,
+            joined_at: new Date().toISOString(),
+          },
+        ]);
+
+      if (memberError) {
+        // If adding member fails, revert the request status
+        await supabase
+          .from('requests')
+          .update({ status: 'Pending' })
+          .eq('id', requestId);
+
+        console.error(
+          '❌ [WorkspaceService] Error adding user as member:',
+          memberError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error adding user as member',
+        });
+      }
+
+      console.log('✅ [WorkspaceService] approveJoinRequest successful');
+      return {
+        message: 'Join request approved successfully',
+        requestId,
+        userId: requestData.user_id,
+      };
+    } catch (error) {
+      console.error(
+        '❌ [WorkspaceService] Error in approveJoinRequest:',
+        error,
+      );
+      if (error instanceof RpcException) {
+        throw error;
+      }
+      throw new RpcException({
+        status: 500,
+        message: 'Error approving join request',
+      });
+    }
+  }
+
+  async rejectJoinRequest(
+    workspaceId: string,
+    requestId: string,
+    userId: string,
+  ) {
+    console.log(
+      '❌ [WorkspaceService] rejectJoinRequest called for workspace:',
+      workspaceId,
+      'request:',
+      requestId,
+      'by user:',
+      userId,
+    );
+
+    try {
+      // Check if user is admin of the workspace
+      const isAdmin = await this.isUserWorkspaceAdmin(userId, workspaceId);
+      if (!isAdmin) {
+        throw new RpcException({
+          status: 403,
+          message:
+            'Access denied. Only workspace admins can reject join requests.',
+        });
+      }
+
+      // Check if the request exists and is pending
+      const { data: requestData, error: checkError } =
+        await this.supabaseService
+          .getClient()
+          .from('requests')
+          .select('*')
+          .eq('id', requestId)
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'Pending')
+          .single();
+
+      if (checkError || !requestData) {
+        console.error(
+          '❌ [WorkspaceService] Join request not found or already processed:',
+          checkError,
+        );
+        throw new RpcException({
+          status: 404,
+          message: 'Join request not found or already processed',
+        });
+      }
+
+      // Delete the join request
+      const { error: deleteError } = await this.supabaseService
+        .getClient()
+        .from('requests')
+        .delete()
+        .eq('id', requestId);
+
+      if (deleteError) {
+        console.error(
+          '❌ [WorkspaceService] Error deleting join request:',
+          deleteError,
+        );
+        throw new RpcException({
+          status: 500,
+          message: 'Error deleting join request',
+        });
+      }
+
+      console.log('✅ [WorkspaceService] rejectJoinRequest successful');
+      return {
+        message: 'Join request rejected successfully',
+        requestId,
+      };
+    } catch (error) {
+      console.error('❌ [WorkspaceService] Error in rejectJoinRequest:', error);
+      if (error instanceof RpcException) {
+        throw error;
+      }
+      throw new RpcException({
+        status: 500,
+        message: 'Error rejecting join request',
+      });
+    }
   }
 }

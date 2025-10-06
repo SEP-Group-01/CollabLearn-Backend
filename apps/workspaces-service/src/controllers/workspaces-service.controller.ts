@@ -8,6 +8,7 @@ import {
 import { WorkspacesService } from '../services/workspaces.service';
 import { WorkspaceUserService } from '../services/workspace-user.service';
 import { WorkspaceForumService } from '../services/workspace-forum.service';
+import { WorkspaceThreadsService } from '../services/workspace-threads.service';
 import { AllExceptionsFilter } from '../utils/all-exceptions.filter';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
@@ -25,6 +26,7 @@ export class WorkspacesController {
     private readonly workspacesService: WorkspacesService,
     private readonly workspaceUserService: WorkspaceUserService,
     private readonly workspaceForumService: WorkspaceForumService,
+    private readonly workspaceThreadsService: WorkspaceThreadsService,
   ) {}
 
   @MessagePattern({ cmd: 'get-workspace-by-id' })
@@ -46,12 +48,17 @@ export class WorkspacesController {
   }
 
   @MessagePattern({ cmd: 'get-workspaces-by-search-term' })
-  getWorkspacesBySearchTerm(@Payload() data: { searchTerm: string }) {
+  getWorkspacesBySearchTerm(
+    @Payload() data: { searchTerm: string; userId?: string },
+  ) {
     console.log(
       '🎯 [WorkspaceController] Received get-workspaces-by-search-term message with data:',
       data,
     );
-    return this.workspacesService.getWorkspacesBySearchTerm(data.searchTerm);
+    return this.workspacesService.getWorkspacesBySearchTerm(
+      data.searchTerm,
+      data.userId,
+    );
   }
 
   @MessagePattern({ cmd: 'create-workspace' })
@@ -221,13 +228,49 @@ export class WorkspacesController {
     return this.workspacesService.deleteInvite(data.userId, data.inviteId);
   }
 
+  @MessagePattern({ cmd: 'get-workspace-members' })
+  getWorkspaceMembers(
+    @Payload() data: { workspaceId: string; userId?: string },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-workspace-members message with data:',
+      data,
+    );
+    return this.workspacesService.getWorkspaceMembers(
+      data.workspaceId,
+      data.userId,
+    );
+  }
+
   @MessagePattern({ cmd: 'get-threads-by-workspace-id' })
   getThreadsByWorkspaceId(@Payload() data: { workspaceId: string }) {
     console.log(
       '🎯 [WorkspaceController] Received get-threads-by-workspace-id message with data:',
       data,
     );
-    return this.workspacesService.getThreadsByWorkspaceId(data.workspaceId);
+    return this.workspaceThreadsService.getThreadsByWorkspaceId(
+      data.workspaceId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'create-thread' })
+  createThread(
+    @Payload()
+    data: {
+      workspaceId: string;
+      threadData: { name: string; description: string };
+      createdBy: string;
+    },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received create-thread message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.createThread(
+      data.workspaceId,
+      data.threadData,
+      data.createdBy,
+    );
   }
 
   // Forum Messages related handlers
@@ -279,5 +322,205 @@ export class WorkspacesController {
       data,
     );
     return this.workspaceForumService.pinWorkspaceForumMessage(data);
+  }
+
+  // Thread-specific operations
+  @MessagePattern({ cmd: 'get-thread' })
+  getThread(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-thread message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.getThread(data.threadId, data.userId);
+  }
+
+  @MessagePattern({ cmd: 'update-thread' })
+  updateThread(
+    @Payload()
+    data: {
+      threadId: string;
+      threadData: { name?: string; description?: string };
+      userId: string;
+    },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received update-thread message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.updateThread(
+      data.threadId,
+      data.threadData,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'delete-thread' })
+  deleteThread(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received delete-thread message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.deleteThread(
+      data.threadId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'subscribe-to-thread' })
+  subscribeToThread(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received subscribe-to-thread message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.subscribeToThread(
+      data.threadId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'unsubscribe-from-thread' })
+  unsubscribeFromThread(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received unsubscribe-from-thread message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.unsubscribeFromThread(
+      data.threadId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get-thread-subscribers' })
+  getThreadSubscribers(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-thread-subscribers message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.getThreadSubscribers(
+      data.threadId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'assign-thread-moderators' })
+  assignThreadModerators(
+    @Payload() data: { threadId: string; userIds: string[]; userId: string },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received assign-thread-moderators message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.assignModerators(
+      data.threadId,
+      data.userIds,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'remove-thread-moderators' })
+  removeThreadModerators(
+    @Payload() data: { threadId: string; userIds: string[]; userId: string },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received remove-thread-moderators message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.removeModerators(
+      data.threadId,
+      data.userIds,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get-thread-stats' })
+  getThreadStats(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-thread-stats message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.getThreadStats(
+      data.threadId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get-thread-resources' })
+  getThreadResources(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-thread-resources message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.getThreadResources(
+      data.threadId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get-thread-quizzes' })
+  getThreadQuizzes(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-thread-quizzes message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.getThreadQuizzes(
+      data.threadId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get-quiz-attempts' })
+  getQuizAttempts(@Payload() data: { quizId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-quiz-attempts message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.getQuizAttempts(
+      data.quizId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get-workspace-join-requests' })
+  getWorkspaceJoinRequests(
+    @Payload() data: { workspaceId: string; userId: string },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-workspace-join-requests message with data:',
+      data,
+    );
+    return this.workspacesService.getWorkspaceJoinRequests(
+      data.workspaceId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'approve-join-request' })
+  approveJoinRequest(
+    @Payload() data: { workspaceId: string; requestId: string; userId: string },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received approve-join-request message with data:',
+      data,
+    );
+    return this.workspacesService.approveJoinRequest(
+      data.workspaceId,
+      data.requestId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'reject-join-request' })
+  rejectJoinRequest(
+    @Payload() data: { workspaceId: string; requestId: string; userId: string },
+  ) {
+    console.log(
+      '🎯 [WorkspaceController] Received reject-join-request message with data:',
+      data,
+    );
+    return this.workspacesService.rejectJoinRequest(
+      data.workspaceId,
+      data.requestId,
+      data.userId,
+    );
   }
 }

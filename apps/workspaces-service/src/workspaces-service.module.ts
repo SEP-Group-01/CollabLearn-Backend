@@ -5,6 +5,7 @@ import { WorkspacesController } from './controllers/workspaces-service.controlle
 import { WorkspacesService } from './services/workspaces.service';
 import { WorkspaceUserService } from './services/workspace-user.service';
 import { WorkspaceForumService } from './services/workspace-forum.service';
+import { WorkspaceThreadsService } from './services/workspace-threads.service';
 import { SupabaseService } from './services/supabase.service';
 
 @Module({
@@ -29,6 +30,7 @@ import { SupabaseService } from './services/supabase.service';
     WorkspacesService,
     WorkspaceUserService,
     WorkspaceForumService,
+    WorkspaceThreadsService,
     SupabaseService,
   ],
 })
