@@ -102,7 +102,7 @@ def get_workspace_resources(user_id: str, workspace_ids: List[str]) -> Dict[str,
                     COALESCE(up.completion_status, 'not_started') as completion_status,
                     COALESCE(up.progress_percentage, 0) as progress_percentage,
                     COALESCE(up.actual_time_spent, 0) as actual_time_spent
-                FROM study_resources r
+                FROM thread_resources r
                 LEFT JOIN user_progress up ON r.id = up.resource_id AND up.user_id = %s
                 WHERE r.workspace_id = %s
                 ORDER BY r.thread_id, r.sequence_number
@@ -139,7 +139,7 @@ def get_user_workspace_threads(user_id: str, workspace_id: str) -> List[str]:
     try:
         cur.execute("""
             SELECT DISTINCT thread_id 
-            FROM study_resources 
+            FROM thread_resources 
             WHERE workspace_id = %s
             AND thread_id IN (
                 SELECT thread_id FROM user_workspace_threads 
