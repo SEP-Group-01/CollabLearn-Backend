@@ -1,7 +1,7 @@
 -- Enhanced database schema for multi-workspace study plan service
 
--- Table to store study resources (videos, documents, quizzes, etc.)
-CREATE TABLE IF NOT EXISTS study_resources (
+-- Table to store thread resources (videos, documents, quizzes, etc.)
+CREATE TABLE IF NOT EXISTS thread_resources (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(500) NOT NULL,
     type VARCHAR(50) NOT NULL CHECK (type IN ('video', 'document', 'quiz', 'link', 'reading')),
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS user_progress (
     completed_at TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, resource_id),
-    FOREIGN KEY (resource_id) REFERENCES study_resources(id) ON DELETE CASCADE
+    FOREIGN KEY (resource_id) REFERENCES thread_resources(id) ON DELETE CASCADE
 );
 
 -- Table to store user's available time slots
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     actual_completion_time INTEGER, -- actual time spent in minutes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (plan_id) REFERENCES study_plans(id) ON DELETE CASCADE,
-    FOREIGN KEY (resource_id) REFERENCES study_resources(id) ON DELETE CASCADE
+    FOREIGN KEY (resource_id) REFERENCES thread_resources(id) ON DELETE CASCADE
 );
 
 -- Table to track user access to workspace threads
@@ -114,8 +114,8 @@ CREATE TABLE IF NOT EXISTS threads (
 );
 
 -- Indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_study_resources_thread ON study_resources(thread_id, sequence_number);
-CREATE INDEX IF NOT EXISTS idx_study_resources_workspace ON study_resources(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_thread_resources_thread ON thread_resources(thread_id, sequence_number);
+CREATE INDEX IF NOT EXISTS idx_thread_resources_workspace ON thread_resources(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_user_progress_user ON user_progress(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_progress_resource ON user_progress(resource_id);
 CREATE INDEX IF NOT EXISTS idx_study_slots_user ON study_slots(user_id);
@@ -134,7 +134,7 @@ END;
 $$ language 'plpgsql';
 
 -- Add triggers for updated_at
-CREATE TRIGGER update_study_resources_updated_at BEFORE UPDATE ON study_resources FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_thread_resources_updated_at BEFORE UPDATE ON thread_resources FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_user_progress_updated_at BEFORE UPDATE ON user_progress FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_study_plans_updated_at BEFORE UPDATE ON study_plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_workspaces_updated_at BEFORE UPDATE ON workspaces FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
