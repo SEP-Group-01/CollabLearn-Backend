@@ -22,6 +22,31 @@ export class QuizController {
     private readonly workspacesService: ClientProxy,
   ) {}
 
+  // Helper method to validate token
+  private async validateAuthToken(authHeader: string) {
+    if (!authHeader) {
+      throw new HttpException(
+        'Authorization header is required',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.substring(7)
+      : authHeader;
+
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'validate_token' }, { token }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        'Invalid or expired token',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+  }
+
   // Health check endpoint
   @Get('health')
   health(): { status: string; timestamp: string } {
@@ -32,7 +57,7 @@ export class QuizController {
   }
 
   // Create a new quiz
-  @Post()
+  @Post('create')
   async createQuiz(
     @Headers('authorization') authorizationHeader: string,
     @Body()
@@ -49,53 +74,43 @@ export class QuizController {
       thread_id?: string;
     },
   ) {
+    console.log('token:', authorizationHeader);
     console.log('Creating quiz:', body);
 
     try {
-      // 1. Extract JWT token from Authorization header
-      if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
-        throw new HttpException(
-          'Authorization token is required',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      const token = authorizationHeader.substring(7); // Remove 'Bearer ' prefix
-
-      // 2. Validate token with auth service and get decoded user data
+      // 1. Validate token with auth service and get decoded user data
       console.log('Validating token with auth service...');
-      const authResult = await firstValueFrom(
-        this.authService.send({ cmd: 'validate_token' }, { token }),
-      );
+      const authResult = await this.validateAuthToken(authorizationHeader);
+      console.log(authResult);
 
-      if (!authResult.success) {
+      if (!authResult.valid) {
         throw new HttpException(
           'Invalid or expired token',
           HttpStatus.UNAUTHORIZED,
         );
       }
 
-      const { userId } = authResult.user;
+      const userId = authResult.user.id;
       console.log('Token validated for user:', userId);
 
       // 3. Check user permissions with workspace service
-      console.log('Checking user permissions for thread:', body.thread_id);
-      const permissionResult = await firstValueFrom(
-        this.workspacesService.send(
-          { cmd: 'check_user_permission' },
-          { userId, threadId: body.thread_id },
-        ),
-      );
+      // console.log('Checking user permissions for thread:', body.thread_id);
+      // const permissionResult = await firstValueFrom(
+      //   this.workspacesService.send(
+      //     { cmd: 'check_moderator_or_admin' },
+      //     { userId, threadId: body.thread_id },
+      //   ),
+      // );
 
-      if (!permissionResult.success) {
-        throw new HttpException(
-          'Permission denied: You must be a workspace admin or thread moderator to create quizzes',
-          HttpStatus.FORBIDDEN,
-        );
-      }
+      // if (!permissionResult.success) {
+      //   throw new HttpException(
+      //     'Permission denied: You must be a workspace admin or thread moderator to create quizzes',
+      //     HttpStatus.FORBIDDEN,
+      //   );
+      // }
 
-      const { workspaceId } = permissionResult;
-      console.log('Permission granted for workspace:', workspaceId);
+      // const { workspaceId } = permissionResult;
+      // console.log('Permission granted for workspace:', workspaceId);
 
       // 4. Create quiz with validated user data
       const createQuizData = {
@@ -108,7 +123,6 @@ export class QuizController {
           resourceTags: body.resourceTags || [],
         },
         userId,
-        workspaceId,
         threadId: body.thread_id,
       };
 
@@ -155,31 +169,29 @@ export class QuizController {
     },
   ) {
     try {
-      if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
-        throw new HttpException('Authorization token is required', HttpStatus.UNAUTHORIZED)
-      }
-
-      const token = authorizationHeader.substring(7)
-
-      const authResult = await firstValueFrom(
-        this.authService.send({ cmd: 'validate_token' }, { token }),
-      )
+      const authResult = await this.validateAuthToken(authorizationHeader);
 
       if (!authResult?.success) {
-        throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED)
+        throw new HttpException(
+          'Invalid or expired token',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
 
-      const { userId } = authResult.user
+      const { userId } = authResult.user;
 
       const permissionResult = await firstValueFrom(
-        this.workspacesService.send({ cmd: 'check_user_permission' }, { userId, threadId }),
-      )
+        this.workspacesService.send(
+          { cmd: 'check_user_permission' },
+          { userId, threadId },
+        ),
+      );
 
       if (!permissionResult?.success) {
-        throw new HttpException('Permission denied', HttpStatus.FORBIDDEN)
+        throw new HttpException('Permission denied', HttpStatus.FORBIDDEN);
       }
 
-      const { workspaceId } = permissionResult
+      const { workspaceId } = permissionResult;
 
       const createQuizData = {
         createQuizDto: {
@@ -193,20 +205,25 @@ export class QuizController {
         userId,
         workspaceId,
         threadId,
-      }
+      };
 
-      const result = await firstValueFrom(this.quizService.send({ cmd: 'create_quiz' }, createQuizData))
+      const result = await firstValueFrom(
+        this.quizService.send({ cmd: 'create_quiz' }, createQuizData),
+      );
 
       return {
         success: true,
         quizId: result.quiz.id,
         message: 'Quiz created successfully',
         quiz: result.quiz,
-      }
+      };
     } catch (err) {
-      const error = err as Error
-      console.error('Error creating quiz in thread:', err)
-      throw new HttpException(error.message || 'Failed to create quiz', HttpStatus.INTERNAL_SERVER_ERROR)
+      const error = err as Error;
+      console.error('Error creating quiz in thread:', err);
+      throw new HttpException(
+        error.message || 'Failed to create quiz',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -257,9 +274,11 @@ export class QuizController {
     } catch (error) {
       console.error('Error fetching quiz:', error);
       // If the microservice threw an HttpException-like structure, propagate message/status
-      const err = error as any
-      const msg = err?.message || (err?.error?.message ? err.error.message : 'Quiz not found')
-      throw new HttpException(msg, HttpStatus.NOT_FOUND)
+      const err = error;
+      const msg =
+        err?.message ||
+        (err?.error?.message ? err.error.message : 'Quiz not found');
+      throw new HttpException(msg, HttpStatus.NOT_FOUND);
     }
   }
 
@@ -282,12 +301,20 @@ export class QuizController {
       return await firstValueFrom(
         this.quizService.send(
           { cmd: 'attempt_quiz' },
-          { attemptQuizDto: { attemptId: body['attemptId'], quizId, userId: body.userId, answers: body.answers, timeTaken: body.timeTaken } },
+          {
+            attemptQuizDto: {
+              attemptId: body['attemptId'],
+              quizId,
+              userId: body.userId,
+              answers: body.answers,
+              timeTaken: body.timeTaken,
+            },
+          },
         ),
       );
     } catch (error) {
       console.error('Error submitting quiz attempt:', error);
-      const e = error as Error
+      const e = error as Error;
       throw new HttpException(
         e.message || 'Failed to submit quiz attempt',
         HttpStatus.INTERNAL_SERVER_ERROR,
