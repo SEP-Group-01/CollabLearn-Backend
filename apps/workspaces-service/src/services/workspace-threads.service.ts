@@ -1328,4 +1328,77 @@ export class WorkspaceThreadsService {
       });
     }
   }
+
+  /**
+   * Check if a user is a thread moderator or workspace admin for the thread's workspace.
+   * Returns an object: { isAdminOrModerator: boolean }
+   */
+  async checkAdminOrModerator(threadId: string, userId: string) {
+    console.log(
+      `🔒 [WorkspaceThreadsService] checkAdminOrModerator called for thread: ${threadId} user: ${userId}`,
+    );
+
+    try {
+      // First check thread_moderators table for a matching record
+      const { data: moderatorData, error: moderatorError } =
+        await this.supabaseService
+          .getClient()
+          .from('thread_moderators')
+          .select('user_id')
+          .eq('user_id', userId)
+          .eq('thread_id', threadId)
+          .single();
+
+      if (!moderatorError && moderatorData) {
+        console.log('✅ [WorkspaceThreadsService] User is a thread moderator');
+        return { isAdminOrModerator: true };
+      }
+
+      // If not a moderator, get workspace_id from threads table
+      const { data: threadData, error: threadError } =
+        await this.supabaseService
+          .getClient()
+          .from('threads')
+          .select('workspace_id')
+          .eq('id', threadId)
+          .single();
+
+      if (threadError || !threadData) {
+        console.warn(
+          '⚠️ [WorkspaceThreadsService] Thread not found when checking admin/moderator:',
+          threadError,
+        );
+        // If thread not found, treat as not admin/moderator (could also raise error but requirement says helper)
+        return { isAdminOrModerator: false };
+      }
+
+      const workspaceId = threadData.workspace_id;
+
+      // Check workspace_admins table for a matching record
+      const { data: adminData, error: adminError } = await this.supabaseService
+        .getClient()
+        .from('workspace_admins')
+        .select('user_id')
+        .eq('user_id', userId)
+        .eq('workspace_id', workspaceId)
+        .single();
+
+      if (!adminError && adminData) {
+        console.log('✅ [WorkspaceThreadsService] User is a workspace admin');
+        return { isAdminOrModerator: true };
+      }
+
+      console.log(
+        'ℹ️ [WorkspaceThreadsService] User is not admin or moderator',
+      );
+      return { isAdminOrModerator: false };
+    } catch (error) {
+      console.error(
+        '❌ [WorkspaceThreadsService] Error in checkAdminOrModerator:',
+        error,
+      );
+      // On unexpected error, return false (or could throw RpcException). We'll return false to keep helper semantics.
+      return { isAdminOrModerator: false };
+    }
+  }
 }

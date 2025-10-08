@@ -334,6 +334,18 @@ export class WorkspacesController {
     return this.workspaceThreadsService.getThread(data.threadId, data.userId);
   }
 
+  @MessagePattern({ cmd: 'check-admin-or-moderator' })
+  checkAdminOrModerator(@Payload() data: { threadId: string; userId: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received check-admin-or-moderator message with data:',
+      data,
+    );
+    return this.workspaceThreadsService.checkAdminOrModerator(
+      data.threadId,
+      data.userId,
+    );
+  }
+
   @MessagePattern({ cmd: 'update-thread' })
   updateThread(
     @Payload()
