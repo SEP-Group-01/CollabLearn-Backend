@@ -19,6 +19,7 @@ CREATE TABLE public.quiz_quizzes (
     resource_tags TEXT[] DEFAULT '{}',
     creator_id UUID NOT NULL,
     workspace_id UUID NOT NULL,
+    thread_id UUID NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

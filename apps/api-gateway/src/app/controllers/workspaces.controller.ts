@@ -154,7 +154,7 @@ export class WorkspacesController {
   @Post('create')
   @UseInterceptors(FileInterceptor('image')) // match field name "image"
   async createWorkspace(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
     @Body() body: any,
     @Headers('authorization') authHeader: string,
   ) {
