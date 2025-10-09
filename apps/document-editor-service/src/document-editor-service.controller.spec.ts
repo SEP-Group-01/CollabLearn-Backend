@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DocumentEditorServiceController } from './document-editor-service.controller';
-import { DocumentEditorServiceService } from './document-editor-service.service';
+import { DocumentEditorServiceController } from './services/document-editor-service.controller';
+import { DocumentEditorServiceService } from './services/document-editor-service.service';
 
 describe('DocumentEditorServiceController', () => {
   let documentEditorServiceController: DocumentEditorServiceController;

@@ -6,9 +6,10 @@ import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
 import { ForumController } from './controllers/forum.controller';
 import { KafkaService } from './services/kafka.service';
+import { RedisBridgeService } from './services/redis-bridge.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { DocumentEditorController } from './controllers/document-editor.controller';
+import { DocumentEditorController } from './controllers/document-editor-enhanced.controller';
 import { QuizController } from './controllers/quiz.controller';
 import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 import { ForumGateway } from './gateways/forum.gateway';
@@ -86,6 +87,6 @@ import { QuizGateway } from './gateways/quiz.gateway';
     QuizController,
     KafkaReplyController,
   ],
-  providers: [KafkaService, DocumentEditorGateway, ForumGateway, QuizGateway],
+  providers: [KafkaService, RedisBridgeService, DocumentEditorGateway, ForumGateway, QuizGateway],
 })
 export class AppModule {}

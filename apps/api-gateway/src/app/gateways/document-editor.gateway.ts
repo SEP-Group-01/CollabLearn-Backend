@@ -6,34 +6,48 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
 } from '@nestjs/websockets';
-import { Server, WebSocket } from 'ws';
+import { Server, Socket } from 'socket.io';
 import { Inject, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { RedisBridgeService } from '../services/redis-bridge.service';
 
 @WebSocketGateway({
+  namespace: '/collaboration',
   cors: {
     origin: '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
   },
+  transports: ['websocket'],
 })
-export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(DocumentEditorGateway.name);
-  private documentClients = new Map<string, Set<WebSocket>>();
+  private documentClients = new Map<string, Set<Socket>>();
 
   constructor(
     @Inject('DOCUMENT_EDITOR_SERVICE')
     private readonly documentEditorService: ClientProxy,
+    private readonly redisBridgeService: RedisBridgeService,
   ) {}
 
-  handleConnection(client: WebSocket) {
-    this.logger.log(`Client connected`);
+  afterInit(server: Server) {
+    this.logger.log('DocumentEditorGateway initialized');
+    // Register this gateway with the Redis bridge service
+    this.redisBridgeService.setGateway(this);
   }
 
-  handleDisconnect(client: WebSocket) {
-    this.logger.log(`Client disconnected`);
+  handleConnection(client: Socket) {
+    this.logger.log(`Client connected: ${client.id}`);
+  }
+
+  handleDisconnect(client: Socket) {
+    this.logger.log(`Client disconnected: ${client.id}`);
     // Clean up client from all document rooms
     this.documentClients.forEach((clients, documentId) => {
       clients.delete(client);
@@ -43,38 +57,45 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
     });
   }
 
-  private addClientToDocument(documentId: string, client: WebSocket) {
+  private addClientToDocument(documentId: string, client: Socket) {
     if (!this.documentClients.has(documentId)) {
       this.documentClients.set(documentId, new Set());
     }
     this.documentClients.get(documentId)!.add(client);
+    client.join(`document-${documentId}`);
   }
 
-  private removeClientFromDocument(documentId: string, client: WebSocket) {
+  private removeClientFromDocument(documentId: string, client: Socket) {
     if (this.documentClients.has(documentId)) {
       this.documentClients.get(documentId)!.delete(client);
       if (this.documentClients.get(documentId)!.size === 0) {
         this.documentClients.delete(documentId);
       }
     }
+    client.leave(`document-${documentId}`);
   }
 
-  private broadcastToDocument(documentId: string, message: any, excludeClient?: WebSocket) {
-    const clients = this.documentClients.get(documentId);
-    if (clients) {
-      const messageStr = JSON.stringify(message);
-      clients.forEach((client) => {
-        if (client !== excludeClient && client.readyState === WebSocket.OPEN) {
-          client.send(messageStr);
-        }
-      });
+  private _broadcastToDocument(documentId: string, message: any, excludeClient?: Socket) {
+    // Use Socket.IO room broadcasting
+    if (excludeClient) {
+      excludeClient.to(`document-${documentId}`).emit('collaboration-event', message);
+    } else {
+      this.server.to(`document-${documentId}`).emit('collaboration-event', message);
     }
+  }
+
+  /**
+   * Public method to broadcast messages to document clients
+   * Used by RedisBridgeService to forward Redis events
+   */
+  public broadcastToDocument(documentId: string, message: any, excludeClient?: Socket) {
+    this._broadcastToDocument(documentId, message, excludeClient);
   }
 
   @SubscribeMessage('document:join')
   async handleJoinDocument(
     @MessageBody() data: { documentId: string; userId: string },
-    @ConnectedSocket() client: WebSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`User ${data.userId} joining document ${data.documentId}`);
@@ -86,10 +107,7 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
         .send('document.join', { documentId: data.documentId, userId: data.userId })
         .toPromise();
       
-      client.send(JSON.stringify({
-        event: 'document:joined',
-        data: result,
-      }));
+      client.emit('document:joined', result);
 
       // Notify other clients
       this.broadcastToDocument(data.documentId, {
@@ -99,17 +117,14 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
       
     } catch (error) {
       this.logger.error('Error joining document:', error);
-      client.send(JSON.stringify({
-        event: 'error',
-        data: { message: 'Failed to join document' },
-      }));
+      client.emit('error', { message: 'Failed to join document' });
     }
   }
 
   @SubscribeMessage('document:leave')
   async handleLeaveDocument(
     @MessageBody() data: { documentId: string; userId: string },
-    @ConnectedSocket() client: WebSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`User ${data.userId} leaving document ${data.documentId}`);
@@ -121,10 +136,7 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
         .send('document.leave', { documentId: data.documentId, userId: data.userId })
         .toPromise();
       
-      client.send(JSON.stringify({
-        event: 'document:left',
-        data: result,
-      }));
+      client.emit('document:left', result);
 
       // Notify other clients
       this.broadcastToDocument(data.documentId, {
@@ -134,17 +146,14 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
       
     } catch (error) {
       this.logger.error('Error leaving document:', error);
-      client.send(JSON.stringify({
-        event: 'error',
-        data: { message: 'Failed to leave document' },
-      }));
+      client.emit('error', { message: 'Failed to leave document' });
     }
   }
 
   @SubscribeMessage('yjs:update')
   async handleYjsUpdate(
     @MessageBody() data: { documentId: string; userId: string; update: ArrayBuffer },
-    @ConnectedSocket() client: WebSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`Y.js update for document ${data.documentId} from user ${data.userId}`);
@@ -171,24 +180,18 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
       }, client);
 
       // Send confirmation to sender
-      client.send(JSON.stringify({
-        event: 'yjs:update-confirmed',
-        data: result,
-      }));
+      client.emit('yjs:update-confirmed', result);
       
     } catch (error) {
       this.logger.error('Error applying Y.js update:', error);
-      client.send(JSON.stringify({
-        event: 'error',
-        data: { message: 'Failed to apply Y.js update' },
-      }));
+      client.emit('error', { message: 'Failed to apply Y.js update' });
     }
   }
 
   @SubscribeMessage('yjs:sync-request')
   async handleYjsSyncRequest(
     @MessageBody() data: { documentId: string; stateVector?: number[] },
-    @ConnectedSocket() client: WebSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`Y.js sync request for document ${data.documentId}`);
@@ -203,41 +206,32 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
           })
           .toPromise();
         
-        client.send(JSON.stringify({
-          event: 'yjs:sync-update',
-          data: {
-            documentId: data.documentId,
-            update: Array.from(result.update),
-          },
-        }));
+        client.emit('yjs:sync-update', {
+          documentId: data.documentId,
+          update: Array.from(result.update),
+        });
       } else {
         // Client has no state, get full document state
         const result = await this.documentEditorService
           .send('document.get', { documentId: data.documentId })
           .toPromise();
         
-        client.send(JSON.stringify({
-          event: 'yjs:sync-update',
-          data: {
-            documentId: data.documentId,
-            update: Array.from(result.yDocState),
-          },
-        }));
+        client.emit('yjs:sync-update', {
+          documentId: data.documentId,
+          update: Array.from(result.yDocState),
+        });
       }
       
     } catch (error) {
       this.logger.error('Error handling Y.js sync request:', error);
-      client.send(JSON.stringify({
-        event: 'error',
-        data: { message: 'Failed to sync document' },
-      }));
+      client.emit('error', { message: 'Failed to sync document' });
     }
   }
 
   @SubscribeMessage('awareness:update')
   async handleAwarenessUpdate(
     @MessageBody() data: { documentId: string; userId: string; awareness: any },
-    @ConnectedSocket() client: WebSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`Awareness update for document ${data.documentId} from user ${data.userId}`);
@@ -272,7 +266,7 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
   @SubscribeMessage('document:get')
   async handleGetDocument(
     @MessageBody() data: { documentId: string },
-    @ConnectedSocket() client: WebSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`Getting document ${data.documentId}`);
@@ -281,16 +275,10 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
         .send('document.get', { documentId: data.documentId })
         .toPromise();
       
-      client.send(JSON.stringify({
-        event: 'document:data',
-        data: result,
-      }));
+      client.emit('document:data', result);
     } catch (error) {
       this.logger.error('Error getting document:', error);
-      client.send(JSON.stringify({
-        event: 'error',
-        data: { message: 'Failed to get document' },
-      }));
+      client.emit('error', { message: 'Failed to get document' });
     }
   }
 
@@ -298,7 +286,7 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
   @SubscribeMessage('document:update')
   async handleDocumentUpdate(
     @MessageBody() data: { documentId: string; userId: string; content: any; operation: string },
-    @ConnectedSocket() client: WebSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`Legacy document update ${data.documentId} by user ${data.userId}`);
@@ -319,16 +307,65 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
       }, client);
 
       // Send confirmation to the sender
-      client.send(JSON.stringify({
-        event: 'document:update-confirmed',
-        data: result,
-      }));
+      client.emit('document:update-confirmed', result);
     } catch (error) {
       this.logger.error('Error updating document:', error);
-      client.send(JSON.stringify({
-        event: 'error',
-        data: { message: 'Failed to update document' },
-      }));
+      client.emit('error', { message: 'Failed to update document' });
+    }
+  }
+
+  @SubscribeMessage('collaboration-event')
+  async handleCollaborationEvent(
+    @MessageBody() message: { type: string; documentId: string; userId: string; data?: any; timestamp?: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      this.logger.log(`Collaboration event: ${message.type} for document ${message.documentId} from user ${message.userId}`);
+      
+      switch (message.type) {
+        case 'content-update':
+          // Handle content update
+          if (message.data?.content) {
+            await this.handleDocumentUpdate(
+              {
+                documentId: message.documentId,
+                userId: message.userId,
+                content: message.data.content,
+                operation: 'content-update'
+              },
+              client
+            );
+          }
+          break;
+          
+        case 'cursor-update':
+          // Handle cursor update - broadcast to other collaborators
+          this.broadcastToDocument(message.documentId, {
+            event: 'cursor-update',
+            userId: message.userId,
+            data: message.data,
+          }, client);
+          break;
+          
+        case 'awareness-update':
+          // Handle awareness update
+          await this.handleAwarenessUpdate(
+            {
+              documentId: message.documentId,
+              userId: message.userId,
+              awareness: message.data?.user || message.data,
+            },
+            client
+          );
+          break;
+          
+        default:
+          this.logger.warn(`Unknown collaboration event type: ${message.type}`);
+      }
+      
+    } catch (error) {
+      this.logger.error('Error handling collaboration event:', error);
+      client.emit('error', { message: 'Failed to process collaboration event' });
     }
   }
 }

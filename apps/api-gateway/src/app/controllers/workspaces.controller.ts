@@ -99,6 +99,55 @@ export class WorkspacesController {
     }
   }
 
+  // Check if user is admin or moderator for a thread
+  @Get('check-admin-moderator/:threadId')
+  async checkAdminOrModerator(
+    @Param('threadId') threadId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      console.log('🔍 [Gateway] Checking admin/moderator status for thread:', threadId);
+      
+      // Validate token and get user information
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+
+      if (!userId) {
+        throw new HttpException(
+          'Unable to extract user ID from token',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      console.log('📋 [Gateway] Sending admin check request for user:', userId, 'thread:', threadId);
+
+      // Call workspaces service to check admin/moderator status
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'check-admin-or-moderator' },
+          { threadId, userId }
+        ).pipe(timeout(10000))
+      );
+
+      console.log('✅ [Gateway] Admin check result:', result);
+
+      return {
+        isAdminOrModerator: result.isAdminOrModerator || false
+      };
+    } catch (error) {
+      console.error('❌ [Gateway] Error checking admin/moderator status:', error);
+      
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      
+      throw new HttpException(
+        'Error checking admin/moderator status',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Post('get-workspaces-by-user-id')
   async getWorkspacesByUserId(@Body() body: { userId: string }) {
     try {

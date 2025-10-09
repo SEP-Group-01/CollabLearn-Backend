@@ -12,12 +12,12 @@ async function bootstrap() {
       transport: Transport.TCP,
       options: {
         host: '0.0.0.0',
-        port: 3004,
+        port: 3006,
       },
     },
   );
 
   await app.listen();
-  logger.log('🚀 Document Editor Service is listening on TCP port 3004');
+  logger.log('🚀 Document Editor Service is listening on TCP port 3006');
 }
 bootstrap();
