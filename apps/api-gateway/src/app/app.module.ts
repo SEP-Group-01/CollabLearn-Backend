@@ -5,11 +5,16 @@ import { WorkspacesController } from './controllers/workspaces.controller';
 import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
 import { ForumController } from './controllers/forum.controller';
+import { StudyPlanController } from './controllers/study-plan.controller';
 import { KafkaService } from './services/kafka.service';
+import { StudyPlanService } from './services/study-plan.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { DocumentEditorController } from './controllers/document-editor.controller';
-import { QuizController } from './controllers/quiz.controller';
+import {
+  QuizController,
+  ThreadQuizController,
+} from './controllers/quiz.controller';
 import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 import { ForumGateway } from './gateways/forum.gateway';
 import { QuizGateway } from './gateways/quiz.gateway';
@@ -82,10 +87,18 @@ import { QuizGateway } from './gateways/quiz.gateway';
     ThreadsController,
     QueryController,
     ForumController,
+    StudyPlanController,
     DocumentEditorController,
     QuizController,
+    ThreadQuizController,
     KafkaReplyController,
   ],
-  providers: [KafkaService, DocumentEditorGateway, ForumGateway, QuizGateway],
+  providers: [
+    KafkaService,
+    StudyPlanService,
+    DocumentEditorGateway,
+    ForumGateway,
+    QuizGateway,
+  ],
 })
 export class AppModule {}

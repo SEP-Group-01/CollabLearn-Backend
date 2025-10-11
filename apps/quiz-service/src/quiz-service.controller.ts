@@ -18,23 +18,21 @@ export class QuizServiceController {
     data: {
       createQuizDto: CreateQuizDto;
       userId: string;
-      workspaceId: string;
       threadId: string;
     },
   ) {
     return this.quizService.createQuiz(
       data.createQuizDto,
       data.userId,
-      data.workspaceId,
       data.threadId,
     );
   }
 
   @MessagePattern({ cmd: 'list_quizzes' })
   async listQuizzes(
-    @Payload() data: { workspaceId?: string; threadId?: string },
+    @Payload() data: { threadId: string; userId?: string },
   ) {
-    return this.quizService.listQuizzes(data.workspaceId, data.threadId);
+    return this.quizService.listQuizzes(data.threadId, data.userId);
   }
 
   @MessagePattern({ cmd: 'get_quiz' })
@@ -72,5 +70,21 @@ export class QuizServiceController {
   @MessagePattern({ cmd: 'validate_user' })
   async validateUser(@Payload() data: { userId: string }) {
     return this.quizService.validateUser(data.userId);
+  }
+
+  @MessagePattern({ cmd: 'check-admin-or-moderator' })
+  async checkAdminOrModerator(
+    @Payload() data: { threadId: string; userId: string },
+  ) {
+    console.log(
+      '🎯 [QuizServiceController] Received check-admin-or-moderator message with data:',
+      data,
+    );
+    return this.quizService.checkAdminOrModerator(data.threadId, data.userId);
+  }
+
+  @MessagePattern({ cmd: 'get_thread_resources' })
+  async getThreadResources(@Payload() data: { threadId: string }) {
+    return this.quizService.getThreadResources(data.threadId);
   }
 }
