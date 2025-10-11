@@ -226,6 +226,39 @@ export class AuthService {
     return this.userService.findUserById(userId);
   }
 
+  async validateToken(token: string) {
+    try {
+      // Verify and decode the JWT token
+      const payload = this.jwtService.verify(token);
+
+      // Optionally, you can also validate if the user still exists
+      const user = await this.userService.findUserById(payload.sub);
+      if (!user) {
+        throw new RpcException({
+          status: 401,
+          message: 'User not found',
+        });
+      }
+
+      return {
+        valid: true,
+        payload,
+        user: {
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email_verified: user.email_verified,
+        },
+      };
+    } catch (error) {
+      throw new RpcException({
+        status: 401,
+        message: 'Invalid or expired token',
+      });
+    }
+  }
+
   getHello(): string {
     return 'Hello World!';
   }

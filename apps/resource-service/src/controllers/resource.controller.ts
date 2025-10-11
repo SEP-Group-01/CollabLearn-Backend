@@ -8,6 +8,7 @@ import {
   UseInterceptors,
   UploadedFile,
   ParseUUIDPipe,
+  Patch,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -15,6 +16,7 @@ import {
   UploadedFile as CustomUploadedFile,
 } from '../services/resource.service';
 import { CreateResourceDto } from '../dto/resource.dto';
+import { CreateReviewDto, UpdateReviewDto } from '../dto/review.dto';
 
 @Controller('workspace/:workspaceId/threads/:threadId')
 export class ResourceController {
@@ -126,5 +128,67 @@ export class ResourceController {
     @Body('userId') userId: string, // In a real app, get this from auth token
   ) {
     return this.resourceService.deleteResource(resourceId, userId);
+  }
+
+  // =============== REVIEW ENDPOINTS ===============
+
+  // POST /workspace/:workspaceId/threads/:threadId/resources/:resourceId/reviews
+  @Post('resources/:resourceId/reviews')
+  async createReview(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Param('resourceId', ParseUUIDPipe) resourceId: string,
+    @Body() reviewData: CreateReviewDto,
+  ) {
+    // Add resource_id to the review data from the URL parameter
+    const reviewWithResourceId = {
+      ...reviewData,
+      resource_id: resourceId,
+    };
+    return this.resourceService.createReview(reviewWithResourceId);
+  }
+
+  // GET /workspace/:workspaceId/threads/:threadId/resources/:resourceId/reviews
+  @Get('resources/:resourceId/reviews')
+  async getReviewsByResource(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Param('resourceId', ParseUUIDPipe) resourceId: string,
+  ) {
+    return this.resourceService.getReviewsByResource(resourceId);
+  }
+
+  // GET /workspace/:workspaceId/threads/:threadId/resources/:resourceId/rating
+  @Get('resources/:resourceId/rating')
+  async getAverageRating(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Param('resourceId', ParseUUIDPipe) resourceId: string,
+  ) {
+    return this.resourceService.getAverageRating(resourceId);
+  }
+
+  // PATCH /workspace/:workspaceId/threads/:threadId/resources/:resourceId/reviews/:reviewId
+  @Patch('resources/:resourceId/reviews/:reviewId')
+  async updateReview(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Param('resourceId', ParseUUIDPipe) resourceId: string,
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+    @Body() updateData: UpdateReviewDto,
+  ) {
+    return this.resourceService.updateReview(reviewId, updateData);
+  }
+
+  // DELETE /workspace/:workspaceId/threads/:threadId/resources/:resourceId/reviews/:reviewId
+  @Delete('resources/:resourceId/reviews/:reviewId')
+  async deleteReview(
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Param('resourceId', ParseUUIDPipe) resourceId: string,
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+    @Body('userId') userId: string, // In a real app, get this from auth token
+  ) {
+    return this.resourceService.deleteReview(reviewId, userId);
   }
 }

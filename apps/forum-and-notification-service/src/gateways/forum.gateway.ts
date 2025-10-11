@@ -47,53 +47,53 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // User joins a group room
+  // User joins a workspace room
   @SubscribeMessage('join-group')
   async handleJoinGroup(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { groupId: number; userId: string },
+    @MessageBody() data: { workspaceId: string; userId: string },
   ) {
-    const { groupId, userId } = data;
-    const roomName = `group-${groupId}`;
+    const { workspaceId, userId } = data;
+    const roomName = `workspace-${workspaceId}`;
 
-    // Join the room
+    // Join the user to the room
     await client.join(roomName);
 
-    // Store user socket mapping
-    this.userSockets.set(userId, client.id);
+    // Store user info for this socket
+    client.data = { userId, workspaceId };
 
-    this.logger.log(`User ${userId} joined group ${groupId}`);
+    this.logger.log(`User ${userId} joined workspace ${workspaceId}`);
 
-    // Notify others in the group that user joined
+    // Optionally, notify other users in the group that someone joined
     client.to(roomName).emit('user-joined', {
       userId,
-      message: 'User joined the group',
+      message: `User ${userId} joined the workspace`,
     });
 
-    return { success: true, message: `Joined group ${groupId}` };
+    return { success: true, message: `Joined workspace ${workspaceId}` };
   }
 
   // User leaves a group room
   @SubscribeMessage('leave-group')
   async handleLeaveGroup(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { groupId: number; userId: string },
+    @MessageBody() data: { workspaceId: string; userId: string },
   ) {
-    const { groupId, userId } = data;
-    const roomName = `group-${groupId}`;
+    const { workspaceId, userId } = data;
+    const roomName = `workspace-${workspaceId}`;
 
     await client.leave(roomName);
     this.userSockets.delete(userId);
 
-    this.logger.log(`User ${userId} left group ${groupId}`);
+    this.logger.log(`User ${userId} left workspace ${workspaceId}`);
 
-    // Notify others in the group that user left
+    // Optionally, notify other users in the group that someone left
     client.to(roomName).emit('user-left', {
       userId,
-      message: 'User left the group',
+      message: `User ${userId} left the workspace`,
     });
 
-    return { success: true, message: `Left group ${groupId}` };
+    return { success: true, message: `Left workspace ${workspaceId}` };
   }
 
   // Real-time message creation
@@ -102,7 +102,7 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody()
     messageData: {
-      groupId: number;
+      workspaceId: string; // Changed from groupId number to workspaceId string
       userId: string;
       content: string;
       parentId?: number;
@@ -111,21 +111,21 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       // Create message using existing service
       const newMessage = await this.forumService.createMessage({
-        groupId: messageData.groupId,
+        workspaceId: messageData.workspaceId,
         authorId: messageData.userId, // Use authorId as per DTO
         content: messageData.content,
       });
 
-      const roomName = `group-${messageData.groupId}`;
+      const roomName = `workspace-${messageData.workspaceId}`;
 
-      // Broadcast new message to all users in the group
+      // Broadcast new message to all users in the workspace
       this.server.to(roomName).emit('new-message', {
         message: newMessage,
-        groupId: messageData.groupId,
+        workspaceId: messageData.workspaceId,
       });
 
       this.logger.log(
-        `New message broadcasted to group ${messageData.groupId}`,
+        `New message broadcasted to workspace ${messageData.workspaceId}`,
       );
 
       return { success: true, message: newMessage };
@@ -146,7 +146,7 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
       messageId: number;
       userId: string;
       content: string;
-      groupId: number;
+      workspaceId: string; // Changed from groupId to workspaceId
     },
   ) {
     try {
@@ -157,16 +157,18 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
         content: replyData.content,
       });
 
-      const roomName = `group-${replyData.groupId}`;
+      const roomName = `workspace-${replyData.workspaceId}`;
 
-      // Broadcast new reply to all users in the group
+      // Broadcast new reply to all users in the workspace
       this.server.to(roomName).emit('new-reply', {
         reply: newReply,
         messageId: replyData.messageId,
-        groupId: replyData.groupId,
+        workspaceId: replyData.workspaceId,
       });
 
-      this.logger.log(`New reply broadcasted to group ${replyData.groupId}`);
+      this.logger.log(
+        `New reply broadcasted to workspace ${replyData.workspaceId}`,
+      );
 
       return { success: true, reply: newReply };
     } catch (error: unknown) {
@@ -186,7 +188,7 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
       messageId?: number;
       replyId?: number;
       userId: string;
-      groupId: number;
+      workspaceId: string; // Changed from groupId to workspaceId
       type: 'message' | 'reply';
     },
   ) {
@@ -212,9 +214,9 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return { success: false, error: 'Invalid like data' };
       }
 
-      const roomName = `group-${likeData.groupId}`;
+      const roomName = `workspace-${likeData.workspaceId}`;
 
-      // Broadcast like update to all users in the group
+      // Broadcast like update to all users in the workspace
       this.server.to(roomName).emit('like-updated', {
         ...likeData,
         liked: result.liked,
@@ -234,11 +236,12 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('typing')
   handleTyping(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { groupId: number; userId: string; isTyping: boolean },
+    @MessageBody()
+    data: { workspaceId: string; userId: string; isTyping: boolean },
   ) {
-    const roomName = `group-${data.groupId}`;
+    const roomName = `workspace-${data.workspaceId}`;
 
-    // Broadcast typing status to others in the group (not to sender)
+    // Broadcast typing status to others in the workspace (not to sender)
     client.to(roomName).emit('user-typing', {
       userId: data.userId,
       isTyping: data.isTyping,
@@ -253,7 +256,7 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
     data: {
       messageId: number;
       userId: string;
-      groupId: number;
+      workspaceId: string; // Changed from groupId to workspaceId
       action: 'pin' | 'unpin';
     },
   ) {
@@ -272,13 +275,13 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
       }
 
-      const roomName = `group-${data.groupId}`;
+      const roomName = `workspace-${data.workspaceId}`;
 
-      // Broadcast pin/unpin update to all users in the group
+      // Broadcast pin/unpin update to all users in the workspace
       this.server.to(roomName).emit('message-pin-updated', {
         messageId: data.messageId,
         isPinned: data.action === 'pin',
-        groupId: data.groupId,
+        workspaceId: data.workspaceId,
       });
 
       return { success: true, data: result };
@@ -298,9 +301,9 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // Method to broadcast updates to a group
-  broadcastToGroup(groupId: number, event: string, data: any) {
-    const roomName = `group-${groupId}`;
+  // Method to broadcast updates to a workspace
+  broadcastToWorkspace(workspaceId: string, event: string, data: any) {
+    const roomName = `workspace-${workspaceId}`;
     this.server.to(roomName).emit(event, data);
   }
 }

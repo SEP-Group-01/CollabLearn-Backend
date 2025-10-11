@@ -12,19 +12,13 @@ import { CreateMessageDto } from '../dto/create-message.dto';
 import { CreateReplyDto } from '../dto/create-reply.dto';
 import { ToggleLikeDto } from '../dto/toggle-like.dto';
 import { MessageType, ReplyType, Author } from '../entities/forum.interfaces';
-import {
-  DbForumMessage,
-  DbForumReply,
-  DbMessageLike,
-  DbReplyLike,
-} from '../entities/database.types';
 
 @Injectable()
 export class ForumService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   async getGroupMessages(
-    groupId: number,
+    workspaceId: string, // UUID string
     userId: string, // UUID string
   ): Promise<MessageType[]> {
     const supabase = this.supabaseService.getClient();
@@ -33,7 +27,7 @@ export class ForumService {
     const { data: messages, error: messagesError } = await supabase
       .from('messages')
       .select('*')
-      .eq('workspace_id', groupId)
+      .eq('workspace_id', workspaceId)
       .is('parent_id', null)
       .order('created_at', { ascending: false });
 
@@ -143,7 +137,7 @@ export class ForumService {
         likes: messageLikes.length,
         isLiked: messageLikes.some((like: any) => like.user_id === userId),
         image: undefined, // Your schema doesn't have image_url
-        groupId: message.workspace_id,
+        workspaceId: message.workspace_id, // Changed from groupId to workspaceId
         replies: messageReplies.map((reply: any) => {
           const replyUserAuth = userMap.get(reply.author_id);
           const replyUserProfile = userProfileMap.get(reply.author_id);
@@ -181,7 +175,7 @@ export class ForumService {
       .from('messages')
       .insert({
         content: createMessageDto.content,
-        workspace_id: createMessageDto.groupId,
+        workspace_id: createMessageDto.workspaceId,
         author_id: createMessageDto.authorId,
         parent_id: null, // For now, we'll handle replies separately
         created_at: new Date().toISOString(),
@@ -234,7 +228,7 @@ export class ForumService {
       likes: 0,
       isLiked: false,
       image: undefined, // Your schema doesn't have image_url
-      groupId: message.workspace_id,
+      workspaceId: message.workspace_id, // Changed from groupId to workspaceId
       replies: [],
     };
   }

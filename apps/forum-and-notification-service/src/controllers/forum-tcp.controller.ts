@@ -17,15 +17,15 @@ export class ForumTcpController {
     @Payload() data: { workspaceId: string; userId?: string },
   ) {
     try {
-      // Convert workspaceId string to number
-      const groupId = parseInt(data.workspaceId);
+      // Use workspaceId as string (UUID)
+      const workspaceId = data.workspaceId;
       const userId = data.userId || 'anonymous';
 
       this.logger.log(
         `TCP: Getting messages for workspace ${data.workspaceId}`,
       );
       const messages = await this.forumService.getGroupMessages(
-        groupId,
+        workspaceId,
         userId,
       );
       return { success: true, data: messages };
@@ -50,9 +50,9 @@ export class ForumTcpController {
     },
   ) {
     try {
-      // Convert workspaceId to number and create DTO
+      // Use workspaceId as string and create DTO
       const createMessageDto: CreateMessageDto = {
-        groupId: parseInt(data.workspaceId),
+        workspaceId: data.workspaceId,
         authorId: data.authorId,
         content: data.content,
       };
@@ -172,11 +172,18 @@ export class ForumTcpController {
   }
 
   @MessagePattern({ cmd: 'create_message' })
-  async createMessageLegacy(@Payload() createMessageDto: CreateMessageDto) {
+  async createMessageLegacy(
+    @Payload()
+    legacyDto: {
+      groupId: number;
+      authorId: string;
+      content: string;
+    },
+  ) {
     return this.createMessage({
-      workspaceId: createMessageDto.groupId.toString(),
-      authorId: createMessageDto.authorId,
-      content: createMessageDto.content,
+      workspaceId: legacyDto.groupId.toString(),
+      authorId: legacyDto.authorId,
+      content: legacyDto.content,
     });
   }
 

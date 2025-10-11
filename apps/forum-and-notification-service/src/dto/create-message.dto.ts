@@ -1,13 +1,13 @@
-import { IsString, IsOptional, IsNotEmpty, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNotEmpty } from 'class-validator';
 
 export class CreateMessageDto {
   @IsString()
   @IsNotEmpty()
   content: string;
 
-  @IsNumber()
+  @IsString()
   @IsNotEmpty()
-  groupId: number;
+  workspaceId: string; // Changed from groupId number to workspaceId string
 
   @IsString()
   @IsNotEmpty()

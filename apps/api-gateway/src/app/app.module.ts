@@ -3,8 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
 import { WorkspacesController } from './controllers/workspaces.controller';
 import { ResourceController } from './controllers/resource.controller';
+import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
-import { ForumController } from './controllers/forum.controller';
 import { KafkaService } from './services/kafka.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
@@ -78,8 +78,8 @@ import { ForumGateway } from './gateways/forum.gateway';
     AuthController,
     WorkspacesController,
     ResourceController, // Add resource controller
+    ThreadsController,
     QueryController,
-    ForumController, // Add forum controller
     DocumentEditorController, // Add document editor controller
     KafkaReplyController,
   ],
