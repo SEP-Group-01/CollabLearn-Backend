@@ -99,6 +99,48 @@ export class WorkspacesController {
     }
   }
 
+  // Get top workspaces by member count
+  @Get('top')
+  async getTopWorkspaces(
+    @Query('limit') limit?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    try {
+      console.log('🔍 [Gateway] Getting top workspaces with limit:', limit || '10');
+      
+      // Parse limit, default to 10
+      const workspaceLimit = limit ? parseInt(limit, 10) : 10;
+      
+      // Validate token if provided (optional for public endpoint)
+      let userId = null;
+      if (authHeader) {
+        try {
+          const tokenValidation = await this.validateAuthToken(authHeader);
+          userId = tokenValidation.user?.id;
+        } catch (error) {
+          // Ignore auth errors for public endpoint
+          console.log('🔍 [Gateway] Auth validation failed, continuing as public request');
+        }
+      }
+
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'get-top-workspaces' },
+          { limit: workspaceLimit, userId },
+        ).pipe(timeout(10000)),
+      );
+
+      console.log('✅ [Gateway] Successfully retrieved top workspaces');
+      return result;
+    } catch (error) {
+      console.error('❌ [Gateway] Error getting top workspaces:', error);
+      throw new HttpException(
+        'Failed to retrieve top workspaces',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // Check if user is admin or moderator for a thread
   @Get('check-admin-moderator/:threadId')
   async checkAdminOrModerator(

@@ -446,6 +446,96 @@ export class WorkspacesService {
     }
   }
 
+  async getTopWorkspaces(limit: number = 10, userId?: string) {
+    console.log(
+      '🔍 [WorkspaceService] getTopWorkspaces called with limit:',
+      limit,
+      'userId:',
+      userId,
+    );
+
+    const supabase = this.supabaseService.getClient();
+    try {
+      // Query to get workspaces ordered by member count
+      const { data: workspaceData, error: workspaceError } = await supabase
+        .from('workspaces')
+        .select(`
+          id,
+          title,
+          description,
+          join_policy,
+          image_url,
+          created_at,
+          updated_at
+        `)
+        .order('created_at', { ascending: false })
+        .limit(limit * 2); // Get more initially to filter and sort by member count
+
+      if (workspaceError) {
+        console.error('❌ [WorkspaceService] Error fetching workspaces:', workspaceError);
+        throw new RpcException({
+          status: 500,
+          message: 'Error fetching workspaces data',
+        });
+      }
+
+      if (!workspaceData || workspaceData.length === 0) {
+        console.log('✅ [WorkspaceService] No workspaces found');
+        return [];
+      }
+
+      // Get member count for each workspace and add metadata
+      const workspacesWithMetadata = await Promise.all(
+        workspaceData.map(async (workspace) => {
+          const workspaceTags = await this.getWorkspaceTags(workspace.id);
+          const workspaceAdmins = await this.getWorkspaceAdmins(workspace.id);
+          const membersCount = await this.getWorkspaceMembersCount(workspace.id);
+
+          // Get user role if userId is provided
+          let userRole = 'user'; // default role for non-authenticated users
+          if (userId) {
+            userRole = await this.getUserRoleInWorkspace(userId, workspace.id);
+          }
+
+          return {
+            id: workspace.id,
+            title: workspace.title,
+            description: workspace.description,
+            join_policy: workspace.join_policy,
+            admin_ids: workspaceAdmins,
+            tags: workspaceTags,
+            image_url: workspace.image_url || null,
+            members_count: membersCount,
+            role: userRole,
+            created_at: workspace.created_at,
+            updated_at: workspace.updated_at,
+          };
+        }),
+      );
+
+      // Sort by member count (descending) and limit results
+      const topWorkspaces = workspacesWithMetadata
+        .sort((a, b) => b.members_count - a.members_count)
+        .slice(0, limit);
+
+      console.log(
+        '✅ [WorkspaceService] getTopWorkspaces successful, found',
+        topWorkspaces?.length || 0,
+        'workspaces',
+      );
+      return topWorkspaces;
+    } catch (error) {
+      console.error(
+        '❌ [WorkspaceService] Error fetching top workspaces:',
+        error,
+      );
+      throw new RpcException({
+        status: 500,
+        message: 'Error fetching top workspaces',
+      });
+    }
+  }
+
   // Helper method to process search terms: tokenize and remove stop words
   private processSearchTerms(searchTerm: string): string[] {
     const stopWords = new Set([

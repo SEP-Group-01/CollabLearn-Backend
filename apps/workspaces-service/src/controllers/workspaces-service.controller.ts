@@ -61,6 +61,15 @@ export class WorkspacesController {
     );
   }
 
+  @MessagePattern({ cmd: 'get-top-workspaces' })
+  getTopWorkspaces(@Payload() data: { limit: number; userId?: string }) {
+    console.log(
+      '🎯 [WorkspaceController] Received get-top-workspaces message with data:',
+      data,
+    );
+    return this.workspacesService.getTopWorkspaces(data.limit, data.userId);
+  }
+
   @MessagePattern({ cmd: 'create-workspace' })
   createWorkspace(@Payload() data: CreateWorkspaceDto) {
     console.log(

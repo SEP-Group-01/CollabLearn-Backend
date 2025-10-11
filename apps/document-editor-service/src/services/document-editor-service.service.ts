@@ -212,9 +212,6 @@ export class DocumentEditorServiceService {
     });
 
     try {
-      // Generate document ID if not provided
-      const documentId = data.documentId || `doc_${Date.now()}`;
-
       // Create Y.js document with proper initialization
       const ydoc = new Y.Doc();
       const ytext = ydoc.getText('content');
@@ -228,17 +225,14 @@ export class DocumentEditorServiceService {
       // Get Y.js state as buffer - ensure it's valid
       const yjsState = Y.encodeStateAsUpdate(ydoc);
       if (!yjsState || yjsState.length === 0) {
-        this.logger.warn(`Generated empty Y.js state for document ${documentId}, creating minimal state`);
+        this.logger.warn(`Generated empty Y.js state, creating minimal state`);
         // Force a small update to ensure valid state
         ytext.insert(ytext.length, '');
         const newYjsState = Y.encodeStateAsUpdate(ydoc);
         this.logger.debug(`Created Y.js state with length: ${newYjsState.length}`);
       }
 
-      // Store document in our map before database operations
-      this.documents.set(documentId, ydoc);
-
-      // Store in Supabase database
+      // Store in Supabase database - let database auto-generate the ID
       const dbDocument = await this.databaseService.createDocument({
         title: data.title || 'New Document',
         content: ytext.toString(),
@@ -250,7 +244,10 @@ export class DocumentEditorServiceService {
 
       this.logger.log(`✅ Document created in database: ${dbDocument.id}`);
 
-      // Save to Redis for real-time collaboration
+      // Store document in our map after getting the database-generated ID
+      this.documents.set(dbDocument.id, ydoc);
+
+      // Save to Redis for real-time collaboration using the database-generated ID
       await this.redisService.saveYjsDocument(dbDocument.id, ydoc);
 
       // Set up document permissions for the creator
