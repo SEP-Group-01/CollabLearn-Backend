@@ -4,8 +4,27 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import { ServerOptions } from 'socket.io';
 
 const logger = new Logger('API-Gateway');
+
+class CustomSocketIOAdapter extends IoAdapter {
+  createIOServer(port: number, options?: ServerOptions): any {
+    const server = super.createIOServer(port, {
+      ...options,
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: true,
+      },
+      transports: ['websocket', 'polling'],
+    });
+    
+    logger.log('🔌 Socket.IO server created with enhanced configuration');
+    return server;
+  }
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -29,7 +48,7 @@ async function bootstrap() {
     options: {
       client: {
         clientId: 'api-gateway-microservice',
-        brokers: [configService.get('KAFKA_BROKERS') || 'kafka:9092'], // Replace with localhost:9093 for local dev
+        brokers: [configService.get('KAFKA_BROKERS') || 'localhost:9092'],
       },
       consumer: {
         groupId: 'gateway-reply-consumer',
@@ -40,8 +59,8 @@ async function bootstrap() {
   // Set global prefix for all REST endpoints
   app.setGlobalPrefix('api');
 
-  // WebSocket Adapter - Using Socket.IO for namespace support
-  app.useWebSocketAdapter(new IoAdapter(app));
+  // WebSocket Adapter - Using custom Socket.IO adapter for better namespace support
+  app.useWebSocketAdapter(new CustomSocketIOAdapter(app));
 
   // Start all microservices (TCP + Kafka)
   await app.startAllMicroservices();
@@ -54,8 +73,7 @@ async function bootstrap() {
   logger.log('🔌 TCP microservice listening on port 3001');
   logger.log('📩 Kafka microservice configured for reply handling');
   logger.log('📩 Kafka client configured via ClientsModule');
-  logger.log(
-    '🔗 WebSocket adapter configured for document and forum collaboration',
-  );
+  logger.log('🔗 WebSocket adapter configured for document, forum, and quiz collaboration');
+  logger.log('🚀 Socket.IO namespaces: /collaboration, /forum, /quiz');
 }
-bootstrap();
+void bootstrap();

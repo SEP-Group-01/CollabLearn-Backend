@@ -60,6 +60,11 @@ export class AuthController {
     return this.authService.validateToken(data.token);
   }
 
+  @MessagePattern({ cmd: 'refresh_token' })
+  async refreshToken(@Payload() data: { refresh_token: string }) {
+    return this.authService.refreshToken(data.refresh_token);
+  }
+
   @Get()
   getHello(): string {
     return this.authService.getHello();

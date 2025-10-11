@@ -100,6 +100,97 @@ export class WorkspacesController {
     }
   }
 
+  // Get top workspaces by member count
+  @Get('top')
+  async getTopWorkspaces(
+    @Query('limit') limit?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    try {
+      console.log('🔍 [Gateway] Getting top workspaces with limit:', limit || '10');
+      
+      // Parse limit, default to 10
+      const workspaceLimit = limit ? parseInt(limit, 10) : 10;
+      
+      // Validate token if provided (optional for public endpoint)
+      let userId = null;
+      if (authHeader) {
+        try {
+          const tokenValidation = await this.validateAuthToken(authHeader);
+          userId = tokenValidation.user?.id;
+        } catch (error) {
+          // Ignore auth errors for public endpoint
+          console.log('🔍 [Gateway] Auth validation failed, continuing as public request');
+        }
+      }
+
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'get-top-workspaces' },
+          { limit: workspaceLimit, userId },
+        ).pipe(timeout(10000)),
+      );
+
+      console.log('✅ [Gateway] Successfully retrieved top workspaces');
+      return result;
+    } catch (error) {
+      console.error('❌ [Gateway] Error getting top workspaces:', error);
+      throw new HttpException(
+        'Failed to retrieve top workspaces',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Check if user is admin or moderator for a thread
+  @Get('check-admin-moderator/:threadId')
+  async checkAdminOrModerator(
+    @Param('threadId') threadId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      console.log('🔍 [Gateway] Checking admin/moderator status for thread:', threadId);
+      
+      // Validate token and get user information
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+
+      if (!userId) {
+        throw new HttpException(
+          'Unable to extract user ID from token',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      console.log('📋 [Gateway] Sending admin check request for user:', userId, 'thread:', threadId);
+
+      // Call workspaces service to check admin/moderator status
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'check-admin-or-moderator' },
+          { threadId, userId }
+        ).pipe(timeout(10000))
+      );
+
+      console.log('✅ [Gateway] Admin check result:', result);
+
+      return {
+        isAdminOrModerator: result.isAdminOrModerator || false
+      };
+    } catch (error) {
+      console.error('❌ [Gateway] Error checking admin/moderator status:', error);
+      
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      
+      throw new HttpException(
+        'Error checking admin/moderator status',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Post('get-workspaces-by-user-id')
   async getWorkspacesByUserId(@Body() body: { userId: string }) {
     try {
@@ -116,12 +207,31 @@ export class WorkspacesController {
   }
 
   @Get('search/:searchTerm')
-  async getWorkspacesBySearchTerm(@Param('searchTerm') searchTerm: string) {
+  async getWorkspacesBySearchTerm(
+    @Param('searchTerm') searchTerm: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
     try {
+      let userId: string | undefined;
+
+      // Try to validate token if provided, but don't require it for search
+      if (authHeader) {
+        try {
+          const tokenValidation = await this.validateAuthToken(authHeader);
+          userId = tokenValidation.user.id;
+        } catch (error) {
+          // If token validation fails, continue without user context
+          console.log(
+            '🔍 [Gateway] Token validation failed, continuing as guest:',
+            error.message,
+          );
+        }
+      }
+
       const workspaces = await firstValueFrom(
         this.workspacesService.send(
           { cmd: 'get-workspaces-by-search-term' },
-          { searchTerm },
+          { searchTerm, userId },
         ),
       );
       return workspaces;
@@ -136,7 +246,7 @@ export class WorkspacesController {
   @Post('create')
   @UseInterceptors(FileInterceptor('image')) // match field name "image"
   async createWorkspace(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
     @Body() body: any,
     @Headers('authorization') authHeader: string,
   ) {
@@ -483,6 +593,51 @@ export class WorkspacesController {
     }
   }
 
+  @Get(':workspaceId/members')
+  async getWorkspaceMembers(
+    @Param('workspaceId') workspaceId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      console.log(
+        '🌐 [Gateway] getWorkspaceMembers called for workspace:',
+        workspaceId,
+      );
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      console.log(
+        '🔐 [Gateway] Token validated for user:',
+        tokenValidation.user.id,
+      );
+
+      console.log(
+        '📤 [Gateway] Sending get-workspace-members message to service...',
+      );
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'get-workspace-members' },
+          { workspaceId, userId: tokenValidation.user.id },
+        ),
+      );
+      console.log(
+        '✅ [Gateway] Received response from workspace service:',
+        result,
+      );
+      return result;
+    } catch (error) {
+      console.error('❌ [Gateway] Error in getWorkspaceMembers:', error);
+      console.error('❌ [Gateway] Error details:', error.message);
+      console.error('❌ [Gateway] Error stack:', error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error getting workspace members',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Delete('invites/:inviteId')
   async deleteInvite(
     @Param('inviteId') inviteId: string,
@@ -600,6 +755,83 @@ export class WorkspacesController {
       }
       throw new HttpException(
         'Error getting user join requests',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get(':workspaceId/join-requests')
+  async getWorkspaceJoinRequests(
+    @Param('workspaceId') workspaceId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'get-workspace-join-requests' },
+          { workspaceId, userId: tokenValidation.user.id },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error getting workspace join requests',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post(':workspaceId/join-requests/:requestId/approve')
+  async approveJoinRequest(
+    @Param('workspaceId') workspaceId: string,
+    @Param('requestId') requestId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'approve-join-request' },
+          { workspaceId, requestId, userId: tokenValidation.user.id },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error approving join request',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Delete(':workspaceId/join-requests/:requestId')
+  async rejectJoinRequest(
+    @Param('workspaceId') workspaceId: string,
+    @Param('requestId') requestId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'reject-join-request' },
+          { workspaceId, requestId, userId: tokenValidation.user.id },
+        ),
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Error rejecting join request',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

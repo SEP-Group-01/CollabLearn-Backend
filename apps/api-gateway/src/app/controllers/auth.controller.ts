@@ -39,6 +39,7 @@ export class AuthController {
     body: {
       email: string; //DTOs are in the auth-service
       password: string;
+      remember_me?: boolean;
     },
   ) {
     console.log('Login attempt:', body);
@@ -169,6 +170,28 @@ export class AuthController {
     try {
       return await firstValueFrom(
         this.authService.send({ cmd: 'validate_token' }, { token }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.UNAUTHORIZED,
+      );
+    }
+  }
+
+  @Post('refresh-token')
+  async refreshToken(@Body() body: { refresh_token: string }) {
+    if (!body.refresh_token) {
+      throw new HttpException(
+        'Refresh token is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Token refresh attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'refresh_token' }, { refresh_token: body.refresh_token }),
       );
     } catch (error) {
       throw new HttpException(

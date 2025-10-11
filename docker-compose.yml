@@ -1,6 +1,5 @@
-
 # docker-compose.yml
-version: '3.8'
+version: "3.8"
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -8,7 +7,7 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - '2181:2181'
+      - "2181:2181"
     networks:
       - collab-network
 
@@ -17,8 +16,8 @@ services:
     depends_on:
       - zookeeper
     ports:
-      - '9092:9092'
-      - '9093:9093'
+      - "9092:9092"
+      - "9093:9093"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -31,29 +30,49 @@ services:
     healthcheck:
       test:
         [
-          'CMD',
-          'kafka-topics',
-          '--bootstrap-server',
-          'localhost:9092',
-          '--list',
+          "CMD",
+          "kafka-topics",
+          "--bootstrap-server",
+          "localhost:9092",
+          "--list",
         ]
       interval: 30s
       timeout: 10s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - collab-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   api-gateway:
     build:
       context: .
       dockerfile: apps/api-gateway/Dockerfile
     ports:
-      - '3000:3000' # HTTP API
-      - '3001:3001' # TCP Microservice
+      - "3000:3000" # HTTP API
+      - "3001:3001" # TCP Microservice
     environment:
       - NODE_ENV=production
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       - KAFKA_BROKERS=${KAFKA_BROKERS_DOCKER:-kafka:9092}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - collab-network
@@ -61,9 +80,9 @@ services:
     healthcheck:
       test:
         [
-          'CMD',
-          'node',
-          '-e',
+          "CMD",
+          "node",
+          "-e",
           "require('http').get('http://localhost:3000/auth/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
         ]
       interval: 30s
@@ -76,7 +95,7 @@ services:
       context: .
       dockerfile: apps/auth-service/Dockerfile
     ports:
-      - '3002:3002' # TCP Microservice
+      - "3002:3002" # TCP Microservice
     environment:
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
@@ -96,9 +115,9 @@ services:
     healthcheck:
       test:
         [
-          'CMD',
-          'node',
-          '-e',
+          "CMD",
+          "node",
+          "-e",
           "require('net').createConnection(3002, '0.0.0.0').on('connect', () => process.exit(0)).on('error', () => process.exit(1))",
         ]
       interval: 30s
@@ -109,3 +128,7 @@ services:
 networks:
   collab-network:
     driver: bridge
+
+volumes:
+  redis-data:
+    driver: local

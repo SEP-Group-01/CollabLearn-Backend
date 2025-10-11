@@ -58,7 +58,7 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto & { remember_me?: boolean }) {
     const user = await this.userService.findUserByEmail(loginDto.email);
 
     console.log('User:', user); // Log the user found for debugging
@@ -86,11 +86,17 @@ export class AuthService {
       });
     }
 
+    // Determine token expiration based on remember_me
+    const expiresIn = loginDto.remember_me ? '30d' : '24h';
+    const refreshExpiresIn = loginDto.remember_me ? '90d' : '7d';
+
     const payload = { sub: user.id, email: user.email };
-    const access_token = this.jwtService.sign(payload);
+    const access_token = this.jwtService.sign(payload, { expiresIn });
+    const refresh_token = this.jwtService.sign(payload, { expiresIn: refreshExpiresIn });
 
     return {
       access_token,
+      refresh_token,
       user: {
         id: user.id,
         email: user.email,
@@ -255,6 +261,44 @@ export class AuthService {
       throw new RpcException({
         status: 401,
         message: 'Invalid or expired token',
+      });
+    }
+  }
+
+  async refreshToken(refreshToken: string) {
+    try {
+      // Verify the refresh token
+      const payload = this.jwtService.verify(refreshToken);
+      
+      // Check if user still exists
+      const user = await this.userService.findUserById(payload.sub);
+      if (!user) {
+        throw new RpcException({
+          status: 401,
+          message: 'User not found',
+        });
+      }
+
+      // Generate new tokens
+      const newPayload = { sub: user.id, email: user.email };
+      const access_token = this.jwtService.sign(newPayload, { expiresIn: '24h' });
+      const refresh_token = this.jwtService.sign(newPayload, { expiresIn: '7d' });
+
+      return {
+        access_token,
+        refresh_token,
+        user: {
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email_verified: user.email_verified,
+        },
+      };
+    } catch (error) {
+      throw new RpcException({
+        status: 401,
+        message: 'Invalid or expired refresh token',
       });
     }
   }
