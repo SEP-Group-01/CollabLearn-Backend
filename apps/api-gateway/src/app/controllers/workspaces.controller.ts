@@ -24,6 +24,7 @@ export class WorkspacesController {
     @Inject('WORKSPACES_SERVICE')
     private readonly workspacesService: ClientProxy,
     @Inject('AUTH_SERVICE') private readonly authService: ClientProxy,
+    @Inject('FORUM_SERVICE') private readonly forumService: ClientProxy,
   ) {}
 
   // Helper method to validate token
@@ -885,7 +886,7 @@ export class WorkspacesController {
       // For now, we'll use the workspace ID as the group ID
       // Later you can implement proper workspace-to-forum-group mapping
       const result = await firstValueFrom(
-        this.workspacesService.send(
+        this.forumService.send(
           { cmd: 'get-workspace-forum-messages' },
           { workspaceId },
         ),
@@ -907,7 +908,7 @@ export class WorkspacesController {
   ) {
     try {
       const result = await firstValueFrom(
-        this.workspacesService.send(
+        this.forumService.send(
           { cmd: 'create-workspace-forum-message' },
           { workspaceId, ...body },
         ),
@@ -929,7 +930,7 @@ export class WorkspacesController {
   ) {
     try {
       const result = await firstValueFrom(
-        this.workspacesService.send(
+        this.forumService.send(
           { cmd: 'toggle-workspace-forum-message-like' },
           { workspaceId, messageId, ...body },
         ),
@@ -951,7 +952,7 @@ export class WorkspacesController {
   ) {
     try {
       const result = await firstValueFrom(
-        this.workspacesService.send(
+        this.forumService.send(
           { cmd: 'pin-workspace-forum-message' },
           { workspaceId, messageId, ...body },
         ),

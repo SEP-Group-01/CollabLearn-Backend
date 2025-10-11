@@ -2,9 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
 import { WorkspacesController } from './controllers/workspaces.controller';
+import { ResourceController } from './controllers/resource.controller';
 import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
-import { ForumController } from './controllers/forum.controller';
 import { KafkaService } from './services/kafka.service';
 import { RedisBridgeService } from './services/redis-bridge.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
@@ -32,7 +32,14 @@ import { QuizGateway } from './gateways/quiz.gateway';
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3003 }, // WORKSPACES_SERVICE_PORT (corrected port)
+        options: { host: 'localhost', port: 3003 }, // WORKSPACES_SERVICE_PORT
+      },
+    ]),
+    ClientsModule.register([
+      {
+        name: 'RESOURCE_SERVICE',
+        transport: Transport.TCP,
+        options: { host: 'localhost', port: 3008 }, // RESOURCE_SERVICE_TCP_PORT
       },
     ]),
     ClientsModule.register([
@@ -80,11 +87,16 @@ import { QuizGateway } from './gateways/quiz.gateway';
   controllers: [
     AuthController,
     WorkspacesController,
+    ResourceController, // Add resource controller
     ThreadsController,
     QueryController,
+<<<<<<< HEAD
+    DocumentEditorController, // Add document editor controller
+=======
     ForumController,
     DocumentEditorController,
     QuizController,
+>>>>>>> origin/dev
     KafkaReplyController,
   ],
   providers: [KafkaService, RedisBridgeService, DocumentEditorGateway, ForumGateway, QuizGateway],

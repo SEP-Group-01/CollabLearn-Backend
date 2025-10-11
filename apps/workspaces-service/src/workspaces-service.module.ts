@@ -11,7 +11,8 @@ import { SupabaseService } from './services/supabase.service';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      // Load environment variables
+      // Load environment variables from project root
+      envFilePath: path.join(__dirname, '../../../.env'),
       isGlobal: true, // Make env accessible globally without importing again
     }),
     ClientsModule.register([

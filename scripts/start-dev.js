@@ -14,6 +14,7 @@ const serviceMap = {
   'document-editor-service': 'document-editor-service',
   'quiz-service': 'quiz-service',
   'workspaces-service': 'workspaces-service',
+  'resource-service': 'resource-service',
 };
 
 function startService(service) {
@@ -64,6 +65,7 @@ Available services:
   document-editor-service - Document Editor service
   quiz-service           - Quiz service
   workspaces-service     - Workspaces service
+  resource-service       - Resource Management service
 
 Examples:
   npm run start:dev api-gateway

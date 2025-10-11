@@ -71,4 +71,5 @@ async function bootstrap() {
   console.log('   - toggle-workspace-forum-message-like');
   console.log('   - pin-workspace-forum-message');
 }
-bootstrap();
+
+void bootstrap();

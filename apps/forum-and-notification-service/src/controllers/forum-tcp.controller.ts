@@ -12,17 +12,25 @@ export class ForumTcpController {
   constructor(private readonly forumService: ForumService) {}
 
   // Get group messages via TCP
-  @MessagePattern({ cmd: 'get_group_messages' })
-  async getGroupMessages(@Payload() data: { groupId: number; userId: string }) {
+  @MessagePattern({ cmd: 'get-workspace-forum-messages' })
+  async getGroupMessages(
+    @Payload() data: { workspaceId: string; userId?: string },
+  ) {
     try {
-      this.logger.log(`TCP: Getting messages for group ${data.groupId}`);
+      // Use workspaceId as string (UUID)
+      const workspaceId = data.workspaceId;
+      const userId = data.userId || 'anonymous';
+
+      this.logger.log(
+        `TCP: Getting messages for workspace ${data.workspaceId}`,
+      );
       const messages = await this.forumService.getGroupMessages(
-        data.groupId,
-        data.userId,
+        workspaceId,
+        userId,
       );
       return { success: true, data: messages };
     } catch (error) {
-      this.logger.error('Error getting group messages:', error);
+      this.logger.error('Error getting workspace forum messages:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -31,16 +39,31 @@ export class ForumTcpController {
   }
 
   // Create message via TCP
-  @MessagePattern({ cmd: 'create_message' })
-  async createMessage(@Payload() createMessageDto: CreateMessageDto) {
+  @MessagePattern({ cmd: 'create-workspace-forum-message' })
+  async createMessage(
+    @Payload()
+    data: {
+      workspaceId: string;
+      authorId: string;
+      content: string;
+      parentMessageId?: string;
+    },
+  ) {
     try {
+      // Use workspaceId as string and create DTO
+      const createMessageDto: CreateMessageDto = {
+        workspaceId: data.workspaceId,
+        authorId: data.authorId,
+        content: data.content,
+      };
+
       this.logger.log(
-        `TCP: Creating message for group ${createMessageDto.groupId}`,
+        `TCP: Creating message for workspace ${data.workspaceId}`,
       );
       const message = await this.forumService.createMessage(createMessageDto);
       return { success: true, data: message };
     } catch (error) {
-      this.logger.error('Error creating message:', error);
+      this.logger.error('Error creating workspace forum message:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -67,16 +90,24 @@ export class ForumTcpController {
   }
 
   // Toggle message like via TCP
-  @MessagePattern({ cmd: 'toggle_message_like' })
-  async toggleMessageLike(@Payload() toggleLikeDto: ToggleLikeDto) {
+  @MessagePattern({ cmd: 'toggle-workspace-forum-message-like' })
+  async toggleMessageLike(
+    @Payload() data: { workspaceId: string; messageId: string; userId: string },
+  ) {
     try {
+      // Convert messageId to number and create DTO
+      const toggleLikeDto: ToggleLikeDto = {
+        messageId: parseInt(data.messageId),
+        userId: data.userId,
+      };
+
       this.logger.log(
-        `TCP: Toggling like for message ${toggleLikeDto.messageId}`,
+        `TCP: Toggling like for message ${data.messageId} in workspace ${data.workspaceId}`,
       );
       const result = await this.forumService.toggleMessageLike(toggleLikeDto);
       return { success: true, data: result };
     } catch (error) {
-      this.logger.error('Error toggling message like:', error);
+      this.logger.error('Error toggling workspace forum message like:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -107,17 +138,21 @@ export class ForumTcpController {
   }
 
   // Pin message via TCP
-  @MessagePattern({ cmd: 'pin_message' })
-  async pinMessage(@Payload() data: { messageId: number; userId: string }) {
+  @MessagePattern({ cmd: 'pin-workspace-forum-message' })
+  async pinMessage(
+    @Payload() data: { workspaceId: string; messageId: string; userId: string },
+  ) {
     try {
-      this.logger.log(`TCP: Pinning message ${data.messageId}`);
-      const result = await this.forumService.pinMessage(
-        data.messageId,
-        data.userId,
+      // Convert messageId to number
+      const messageId = parseInt(data.messageId);
+
+      this.logger.log(
+        `TCP: Pinning message ${data.messageId} in workspace ${data.workspaceId}`,
       );
+      const result = await this.forumService.pinMessage(messageId, data.userId);
       return { success: true, data: result };
     } catch (error) {
-      this.logger.error('Error pinning message:', error);
+      this.logger.error('Error pinning workspace forum message:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -125,23 +160,40 @@ export class ForumTcpController {
     }
   }
 
-  // Unpin message via TCP
-  @MessagePattern({ cmd: 'unpin_message' })
-  async unpinMessage(@Payload() data: { messageId: number; userId: string }) {
-    try {
-      this.logger.log(`TCP: Unpinning message ${data.messageId}`);
-      const result = await this.forumService.unpinMessage(
-        data.messageId,
-        data.userId,
-      );
-      return { success: true, data: result };
-    } catch (error) {
-      this.logger.error('Error unpinning message:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
+  // Legacy TCP endpoints for backward compatibility
+  @MessagePattern({ cmd: 'get_group_messages' })
+  async getGroupMessagesLegacy(
+    @Payload() data: { groupId: number; userId: string },
+  ) {
+    return this.getGroupMessages({
+      workspaceId: data.groupId.toString(),
+      userId: data.userId,
+    });
+  }
+
+  @MessagePattern({ cmd: 'create_message' })
+  async createMessageLegacy(
+    @Payload()
+    legacyDto: {
+      groupId: number;
+      authorId: string;
+      content: string;
+    },
+  ) {
+    return this.createMessage({
+      workspaceId: legacyDto.groupId.toString(),
+      authorId: legacyDto.authorId,
+      content: legacyDto.content,
+    });
+  }
+
+  @MessagePattern({ cmd: 'toggle_message_like' })
+  async toggleMessageLikeLegacy(@Payload() toggleLikeDto: ToggleLikeDto) {
+    return this.toggleMessageLike({
+      workspaceId: '0', // placeholder
+      messageId: toggleLikeDto.messageId.toString(),
+      userId: toggleLikeDto.userId,
+    });
   }
 
   // Health check via TCP
