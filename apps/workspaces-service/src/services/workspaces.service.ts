@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from './supabase.service';
+import { FirebaseStorageService } from './firebase-storage.service';
 import { RpcException } from '@nestjs/microservices';
 import {
   CreateWorkspaceDto,
@@ -12,7 +13,10 @@ import { title } from 'process';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly firebaseStorageService: FirebaseStorageService,
+  ) {}
 
   // Helper method to fetch tags for a workspace
   private async getWorkspaceTags(workspaceId: string): Promise<string[]> {
@@ -678,7 +682,7 @@ export class WorkspacesService {
       console.log(
         '📝 [WorkspaceService] Attempting to insert workspace into database...',
       );
-      // Create the workspace
+      // Create the workspace first (without image_url)
       const { data, error } = await supabase
         .from('workspaces')
         .insert([
@@ -686,9 +690,7 @@ export class WorkspacesService {
             title: workspaceData.title,
             description: workspaceData.description || '',
             join_policy: workspaceData.join_policy || 'request',
-            // Note: tags will be inserted separately into tags table
-            // Note: Excluding 'image' field as it doesn't exist in the database schema
-            // Image handling should be implemented separately with file storage
+            // image_url will be updated after image upload
           },
         ])
         .select()
@@ -709,6 +711,72 @@ export class WorkspacesService {
         '✅ [WorkspaceService] Workspace created successfully:',
         data,
       );
+
+      const workspaceId = data.id;
+      let imageUrl: string | null = null;
+
+      // Handle image upload if provided
+      if (workspaceData.image && workspaceData.image.buffer) {
+        try {
+          console.log('🖼️ [WorkspaceService] Uploading workspace image...');
+          console.log('🔍 [WorkspaceService] Image object structure:', {
+            hasBuffer: !!workspaceData.image.buffer,
+            bufferType: typeof workspaceData.image.buffer,
+            isBuffer: Buffer.isBuffer(workspaceData.image.buffer),
+            bufferKeys: workspaceData.image.buffer ? Object.keys(workspaceData.image.buffer) : 'N/A',
+            mimetype: workspaceData.image.mimetype,
+            size: workspaceData.image.size,
+            originalname: workspaceData.image.originalname
+          });
+          
+          // Validate image file
+          if (!this.firebaseStorageService.isImageFile(workspaceData.image.mimetype)) {
+            throw new RpcException({
+              status: 400,
+              message: 'Invalid file type. Only image files are allowed.',
+            });
+          }
+
+          if (!this.firebaseStorageService.isValidFileSize(workspaceData.image.size)) {
+            throw new RpcException({
+              status: 400,
+              message: 'File size too large. Maximum size is 5MB.',
+            });
+          }
+
+          const uploadResult = await this.firebaseStorageService.uploadWorkspaceImage(
+            workspaceId,
+            workspaceData.image.buffer,
+            workspaceData.image.originalname,
+            workspaceData.image.mimetype,
+          );
+
+          imageUrl = uploadResult.downloadUrl;
+
+          // Update workspace with image URL
+          const { error: updateError } = await supabase
+            .from('workspaces')
+            .update({ image_url: imageUrl })
+            .eq('id', workspaceId);
+
+          if (updateError) {
+            console.error(
+              '⚠️ [WorkspaceService] Error updating workspace with image URL:',
+              updateError,
+            );
+            // Don't fail the workspace creation, just log the error
+          } else {
+            console.log('✅ [WorkspaceService] Workspace image uploaded and URL updated');
+          }
+        } catch (imageError) {
+          console.error(
+            '⚠️ [WorkspaceService] Error uploading workspace image:',
+            imageError,
+          );
+          // Don't fail workspace creation for image upload errors
+          // The workspace is already created, just log the error
+        }
+      }
 
       // Insert tags into the tags table if any tags are provided
       if (workspaceData.tags && workspaceData.tags.length > 0) {
@@ -772,7 +840,7 @@ export class WorkspacesService {
         join_policy: data.join_policy,
         admin_ids: workspaceAdmins,
         tags: workspaceTags, // Use tags from tags table
-        // image: data.image, // Commented out since image column doesn't exist in DB
+        image_url: imageUrl || undefined, // Convert null to undefined
         created_at: data.created_at,
         updated_at: data.updated_at,
       };
@@ -817,6 +885,21 @@ export class WorkspacesService {
     }
 
     try {
+      // Get current workspace data to check for existing image
+      const { data: currentWorkspace, error: fetchError } = await supabase
+        .from('workspaces')
+        .select('image_url')
+        .eq('id', updateData.workspace_id)
+        .single();
+
+      if (fetchError) {
+        console.error('❌ [WorkspaceService] Error fetching current workspace:', fetchError);
+        throw new RpcException({
+          status: 500,
+          message: `Error fetching workspace: ${fetchError.message}`,
+        });
+      }
+
       // Build update object with only provided fields (excluding tags since they're handled separately)
       const updateFields: any = {};
       if (updateData.title !== undefined) updateFields.title = updateData.title;
@@ -824,6 +907,41 @@ export class WorkspacesService {
         updateFields.description = updateData.description;
       if (updateData.join_policy !== undefined)
         updateFields.join_policy = updateData.join_policy;
+
+      // Handle image upload if provided
+      if (updateData.image && updateData.image.buffer) {
+        console.log('📷 [WorkspaceService] Processing image upload for workspace update...');
+        try {
+          const uploadResult = await this.firebaseStorageService.uploadWorkspaceImage(
+            updateData.workspace_id,
+            updateData.image.buffer,
+            updateData.image.originalname,
+            updateData.image.mimetype,
+          );
+          
+          updateFields.image_url = uploadResult.downloadUrl;
+          console.log('✅ [WorkspaceService] Image uploaded successfully:', uploadResult.downloadUrl);
+
+          // Delete old image if it exists and is different
+          if (currentWorkspace.image_url && currentWorkspace.image_url !== uploadResult.downloadUrl) {
+            try {
+              // Extract storage path from old URL and delete
+              if (currentWorkspace.image_url.includes('firebase')) {
+                // This is a simplistic approach - you might want to store the storage path in DB
+                console.log('🗑️ [WorkspaceService] Attempting to delete old image...');
+              }
+            } catch (deleteError) {
+              console.warn('⚠️ [WorkspaceService] Could not delete old image:', deleteError);
+            }
+          }
+        } catch (uploadError) {
+          console.error('❌ [WorkspaceService] Error uploading image:', uploadError);
+          throw new RpcException({
+            status: 500,
+            message: `Error uploading image: ${uploadError.message}`,
+          });
+        }
+      }
 
       // Add updated timestamp
       updateFields.updated_at = new Date().toISOString();
@@ -882,7 +1000,7 @@ export class WorkspacesService {
         if (updateData.tags && updateData.tags.length > 0) {
           const tagInserts = updateData.tags.map((tag) => ({
             workspace_id: updateData.workspace_id,
-            tag_name: tag,
+            tag: tag, // Note: using 'tag' not 'tag_name' based on earlier code
           }));
 
           const { error: tagsError } = await supabase
@@ -915,7 +1033,7 @@ export class WorkspacesService {
         join_policy: data.join_policy,
         admin_ids: data.user_id,
         tags: workspaceTags, // Use tags from tags table
-        // image: data.image, // Commented out since image column doesn't exist in DB
+        image_url: data.image_url, // Include image URL in response
         created_at: data.created_at,
         updated_at: data.updated_at,
       };

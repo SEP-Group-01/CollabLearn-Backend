@@ -96,14 +96,27 @@ export class WorkspacesController {
   }
 
   @MessagePattern({ cmd: 'update-workspace' })
-  updateWorkspace(@Payload() data: UpdateWorkspaceDto) {
+  async updateWorkspace(@Payload() data: UpdateWorkspaceDto) {
     console.log(
       '🎯 [WorkspaceController] Received update-workspace message with data:',
       JSON.stringify(data, null, 2),
     );
-    const result = this.workspacesService.updateWorkspace(data);
-    console.log('📤 [WorkspaceController] Sending update-workspace response');
-    return result;
+    console.log('🔍 [WorkspaceController] Data validation details:');
+    console.log('  - workspace_id:', typeof data.workspace_id, data.workspace_id);
+    console.log('  - user_id:', typeof data.user_id, data.user_id);
+    console.log('  - title:', typeof data.title, data.title);
+    console.log('  - join_policy:', typeof data.join_policy, data.join_policy);
+    console.log('  - tags:', typeof data.tags, data.tags);
+    console.log('  - image:', typeof data.image, data.image ? 'Present' : 'None');
+
+    try {
+      const result = await this.workspacesService.updateWorkspace(data);
+      console.log('📤 [WorkspaceController] Sending update-workspace response');
+      return result;
+    } catch (error) {
+      console.error('❌ [WorkspaceController] Error in updateWorkspace:', error);
+      throw error;
+    }
   }
 
   @MessagePattern({ cmd: 'get-hello' })
