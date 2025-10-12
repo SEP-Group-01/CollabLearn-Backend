@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import * as path from 'path';
 import { WorkspacesController } from './controllers/workspaces-service.controller';
 import { WorkspacesService } from './services/workspaces.service';
 import { WorkspaceUserService } from './services/workspace-user.service';

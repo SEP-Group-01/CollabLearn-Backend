@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import * as Y from 'yjs';
@@ -18,7 +23,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       port: this.configService.get('REDIS_PORT', 6379),
       password: this.configService.get('REDIS_PASSWORD'),
       db: this.configService.get('REDIS_DB', 0),
-      retryDelayOnFailover: 100,
       maxRetriesPerRequest: 3,
       lazyConnect: true,
     };
@@ -26,10 +30,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     try {
       // Main Redis client for general operations
       this.redis = new Redis(redisConfig);
-      
+
       // Dedicated publisher for pub/sub
       this.publisher = new Redis(redisConfig);
-      
+
       // Dedicated subscriber for pub/sub
       this.subscriber = new Redis(redisConfig);
 
@@ -60,7 +64,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const key = `document:${documentId}:state`;
     const state = Y.encodeStateAsUpdate(ydoc);
     const base64State = Buffer.from(state).toString('base64');
-    
+
     await this.redis.setex(key, 3600, base64State); // 1 hour TTL
     this.logger.debug(`Saved document state: ${documentId}`);
   }
@@ -68,7 +72,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async loadYjsDocument(documentId: string): Promise<Y.Doc | null> {
     const key = `document:${documentId}:state`;
     const base64State = await this.redis.get(key);
-    
+
     if (!base64State) {
       return null;
     }
@@ -77,7 +81,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const state = Buffer.from(base64State, 'base64');
       const ydoc = new Y.Doc();
       Y.applyUpdate(ydoc, state);
-      
+
       this.logger.debug(`Loaded document state: ${documentId}`);
       return ydoc;
     } catch (error) {
@@ -87,31 +91,35 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // User Presence/Awareness Management
-  async setUserAwareness(documentId: string, userId: string, awareness: any): Promise<void> {
+  async setUserAwareness(
+    documentId: string,
+    userId: string,
+    awareness: any,
+  ): Promise<void> {
     const key = `document:${documentId}:awareness:${userId}`;
     const data = JSON.stringify({
       ...awareness,
       timestamp: Date.now(),
     });
-    
+
     await this.redis.setex(key, 30, data); // 30 second TTL for presence
   }
 
   async getUserAwareness(documentId: string): Promise<Record<string, any>> {
     const pattern = `document:${documentId}:awareness:*`;
     const keys = await this.redis.keys(pattern);
-    
+
     if (keys.length === 0) {
       return {};
     }
 
     const values = await this.redis.mget(...keys);
     const awareness: Record<string, any> = {};
-    
+
     keys.forEach((key, index) => {
       const userId = key.split(':').pop()!;
       const data = values[index];
-      
+
       if (data) {
         try {
           awareness[userId] = JSON.parse(data);
@@ -183,19 +191,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       ...event,
       timestamp: Date.now(),
     });
-    
+
     await this.publisher.publish(channel, message);
     this.logger.debug(`Published event to ${channel}:`, event.type);
   }
 
   async subscribeToDocumentEvents(
     documentId: string,
-    callback: (event: any) => void
+    callback: (event: any) => void,
   ): Promise<void> {
     const channel = `document:${documentId}:events`;
-    
+
     await this.subscriber.subscribe(channel);
-    
+
     this.subscriber.on('message', (receivedChannel, message) => {
       if (receivedChannel === channel) {
         try {
@@ -222,7 +230,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async getUserSession(userId: string): Promise<any | null> {
     const key = `session:${userId}`;
     const data = await this.redis.get(key);
-    
+
     if (!data) {
       return null;
     }
@@ -241,7 +249,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Document Metadata Caching
-  async cacheDocumentMetadata(documentId: string, metadata: any): Promise<void> {
+  async cacheDocumentMetadata(
+    documentId: string,
+    metadata: any,
+  ): Promise<void> {
     const key = `document:${documentId}:metadata`;
     await this.redis.setex(key, 3600, JSON.stringify(metadata));
   }
@@ -249,7 +260,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async getDocumentMetadata(documentId: string): Promise<any | null> {
     const key = `document:${documentId}:metadata`;
     const data = await this.redis.get(key);
-    
+
     if (!data) {
       return null;
     }
@@ -263,13 +274,20 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // Lock Management for Document Operations
-  async acquireDocumentLock(documentId: string, userId: string, ttl = 10): Promise<boolean> {
+  async acquireDocumentLock(
+    documentId: string,
+    userId: string,
+    ttl = 10,
+  ): Promise<boolean> {
     const key = `document:${documentId}:lock`;
     const result = await this.redis.set(key, userId, 'EX', ttl, 'NX');
     return result === 'OK';
   }
 
-  async releaseDocumentLock(documentId: string, userId: string): Promise<boolean> {
+  async releaseDocumentLock(
+    documentId: string,
+    userId: string,
+  ): Promise<boolean> {
     const key = `document:${documentId}:lock`;
     const script = `
       if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -278,7 +296,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         return 0
       end
     `;
-    
+
     const result = await this.redis.eval(script, 1, key, userId);
     return result === 1;
   }
