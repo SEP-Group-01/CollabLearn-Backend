@@ -2,27 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-
-// Temporarily use require for firebase-admin to avoid TypeScript errors
-const admin = require('firebase-admin');
-
-interface ServiceAccountInterface {
-  type: string;
-  project_id: string;
-  private_key_id: string;
-  private_key: string;
-  client_email: string;
-  client_id: string;
-  auth_uri: string;
-  token_uri: string;
-  auth_provider_x509_cert_url: string;
-  client_x509_cert_url: string;
-  universe_domain: string;
-}
+import * as admin from 'firebase-admin';
 
 @Injectable()
 export class FirebaseAdminService {
-  private app: any;
+  private app: admin.app.App | null = null;
 
   constructor(private configService: ConfigService) {
     this.initializeFirebase();
@@ -42,9 +26,7 @@ export class FirebaseAdminService {
               join(process.cwd(), serviceAccountPath),
               'utf8',
             );
-            const serviceAccount = JSON.parse(
-              serviceAccountFile,
-            ) as ServiceAccountInterface;
+            const serviceAccount = JSON.parse(serviceAccountFile);
 
             this.app = admin.initializeApp({
               credential: admin.credential.cert(serviceAccount),
@@ -72,7 +54,7 @@ export class FirebaseAdminService {
   }
   private fallbackToEnvVars() {
     // Option 2: Using environment variables (better for production)
-    const serviceAccount: ServiceAccountInterface = {
+    const serviceAccount: any = {
       type: 'service_account',
       project_id: this.configService.get<string>('FIREBASE_PROJECT_ID') || '',
       private_key_id:
@@ -117,6 +99,9 @@ export class FirebaseAdminService {
   // Create custom token for user authentication
   async createCustomToken(uid: string, claims?: object): Promise<string> {
     try {
+      if (!this.app) {
+        throw new Error('Firebase app not initialized');
+      }
       return await this.app.auth().createCustomToken(uid, claims);
     } catch (error) {
       console.error('Error creating custom token:', error);
@@ -127,6 +112,9 @@ export class FirebaseAdminService {
   // Verify ID token
   async verifyIdToken(idToken: string) {
     try {
+      if (!this.app) {
+        throw new Error('Firebase app not initialized');
+      }
       return await this.app.auth().verifyIdToken(idToken);
     } catch (error) {
       console.error('Error verifying ID token:', error);

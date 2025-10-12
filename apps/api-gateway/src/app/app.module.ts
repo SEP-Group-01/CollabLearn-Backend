@@ -5,6 +5,7 @@ import { WorkspacesController } from './controllers/workspaces.controller';
 import { ResourceController } from './controllers/resource.controller';
 import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
+import { ForumController } from './controllers/forum.controller';
 import { KafkaService } from './services/kafka.service';
 import { RedisBridgeService } from './services/redis-bridge.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
@@ -25,14 +26,14 @@ import { QuizGateway } from './gateways/quiz.gateway';
       {
         name: 'AUTH_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3002 }, // AUTH_SERVICE_PORT
+        options: { host: 'localhost', port: 3002 },
       },
     ]),
     ClientsModule.register([
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3003 }, // WORKSPACES_SERVICE_PORT
+        options: { host: 'localhost', port: 3003 },
       },
     ]),
     ClientsModule.register([
@@ -90,15 +91,18 @@ import { QuizGateway } from './gateways/quiz.gateway';
     ResourceController, // Add resource controller
     ThreadsController,
     QueryController,
-<<<<<<< HEAD
     DocumentEditorController, // Add document editor controller
-=======
     ForumController,
     DocumentEditorController,
     QuizController,
->>>>>>> origin/dev
     KafkaReplyController,
   ],
-  providers: [KafkaService, RedisBridgeService, DocumentEditorGateway, ForumGateway, QuizGateway],
+  providers: [
+    KafkaService,
+    RedisBridgeService,
+    DocumentEditorGateway,
+    ForumGateway,
+    QuizGateway,
+  ],
 })
 export class AppModule {}
