@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Param, Body, UploadedFile, UseInterceptors, Res, HttpStatus, Inject, Headers, HttpException } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Param, Body, UploadedFile, UseInterceptors, Res, HttpStatus, Inject, Headers, HttpException, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ClientProxy } from '@nestjs/microservices';
 import { Response } from 'express';
@@ -292,13 +292,55 @@ export class DocumentEditorController {
   async uploadMedia(
     @Param('documentId') documentId: string,
     @UploadedFile() file: Express.Multer.File,
-    @Body() data: any
+    @Body() data: any,
+    @Headers('authorization') authHeader: string,
   ) {
-    return this.documentEditorService.send('document.media.upload', {
-      file,
-      documentId,
-      ...data
-    }).toPromise();
+    try {
+      console.log('📸 [Gateway] Uploading media for document:', documentId);
+      console.log('📸 [Gateway] File details:', {
+        originalname: file?.originalname,
+        size: file?.size,
+        mimetype: file?.mimetype
+      });
+      console.log('📸 [Gateway] Additional data:', data);
+      
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+      
+      if (!userId) {
+        throw new HttpException(
+          'User ID not found in token',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      
+      console.log('📸 [Gateway] Token validated for user:', userId);
+      
+      // Extract additional parameters for editor images
+      const { workspaceId, threadId, imagePosition } = data;
+      
+      const response = await firstValueFrom(
+        this.documentEditorService.send('document.media.upload', {
+          file,
+          documentId,
+          userId: userId,
+          workspaceId: workspaceId || null,
+          threadId: threadId || null,
+          imagePosition: imagePosition ? parseInt(imagePosition) : undefined,
+        })
+      );
+      
+      console.log('✅ [Gateway] Media upload successful:', response);
+      
+      return {
+        success: true,
+        data: response,
+        message: 'Media uploaded successfully'
+      };
+    } catch (error) {
+      console.error('❌ [Gateway] Media upload failed:', error);
+      throw new BadRequestException(`Media upload failed: ${error.message}`);
+    }
   }
 
   @Get(':documentId/media')

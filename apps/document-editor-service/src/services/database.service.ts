@@ -400,6 +400,16 @@ export class DatabaseService {
     duration_seconds?: number;
     thumbnail_firebase_path?: string;
   }): Promise<any> {
+    this.logger.log('💾 [Database] Saving media metadata:', {
+      document_id: data.document_id,
+      filename: data.filename,
+      size_bytes: data.size_bytes,
+      mime_type: data.mime_type,
+      uploaded_by: data.uploaded_by,
+      firebase_path: data.firebase_path,
+      hasFirebaseUrl: !!data.firebase_url
+    });
+
     const { data: media, error } = await this.supabase
       .from('document_media')
       .insert(data)
@@ -407,10 +417,11 @@ export class DatabaseService {
       .single();
 
     if (error) {
-      this.logger.error('Failed to save media metadata:', error);
+      this.logger.error('❌ [Database] Failed to save media metadata:', error);
       throw new Error(`Failed to save media metadata: ${error.message}`);
     }
 
+    this.logger.log('✅ [Database] Media metadata saved successfully:', media.id);
     return media;
   }
 
