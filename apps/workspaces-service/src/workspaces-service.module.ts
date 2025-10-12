@@ -8,6 +8,8 @@ import { WorkspaceUserService } from './services/workspace-user.service';
 import { WorkspaceForumService } from './services/workspace-forum.service';
 import { WorkspaceThreadsService } from './services/workspace-threads.service';
 import { SupabaseService } from './services/supabase.service';
+import { FirebaseStorageService } from './services/firebase-storage.service';
+import * as path from 'path';
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { SupabaseService } from './services/supabase.service';
     WorkspaceForumService,
     WorkspaceThreadsService,
     SupabaseService,
+    FirebaseStorageService,
   ],
 })
 export class WorkspacesServiceModule {}

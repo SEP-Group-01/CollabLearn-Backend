@@ -15,7 +15,7 @@ import {
   Headers,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom, timeout } from 'rxjs';
+import { firstValueFrom, timeout, catchError } from 'rxjs';
 import { FileInterceptor } from '@nestjs/platform-express/multer';
 
 @Controller('workspaces')
@@ -252,25 +252,36 @@ export class WorkspacesController {
   ) {
     //Will check with dto in the service
     try {
-      console.log('🔐 [Gateway] Starting token validation...');
-      // Validate the token and get user information
-      const tokenValidation = await this.validateAuthToken(authHeader);
+      console.log('🎯 [Gateway] createWorkspace called');
+      console.log('📁 [Gateway] File received:', file ? 'Yes' : 'No');
+      if (file) {
+        console.log('📁 [Gateway] File details:', {
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+        });
+      }
+      console.log('📋 [Gateway] Body received:', body);
 
-      console.log('🌐 [Gateway] Creating workspace with body:', body);
-      console.log('🌐 [Gateway] Received file:', file ? file : 'No file');
-      console.log('🌐 [Gateway] Authenticated user:', tokenValidation.user);
+      const user = await this.validateAuthToken(authHeader);
+      console.log('👤 [Gateway] Authenticated user:', user);
 
-      // Parse tags if they come as a string
+      // Extract user ID with fallback for different auth response formats
+      const userId = user.user?.id || user.id || user.user?.userId;
+      if (!userId) {
+        throw new HttpException(
+          'Unable to extract user ID from authentication token',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      // Parse tags if they come as a JSON string
       let parsedTags = [];
       if (body.tags) {
         try {
-          parsedTags =
-            typeof body.tags === 'string' ? JSON.parse(body.tags) : body.tags;
+          parsedTags = typeof body.tags === 'string' ? JSON.parse(body.tags) : body.tags;
         } catch (error) {
-          console.warn(
-            '⚠️ [Gateway] Failed to parse tags, using empty array:',
-            error,
-          );
+          console.warn('⚠️ [Gateway] Failed to parse tags:', error);
           parsedTags = [];
         }
       }
@@ -278,17 +289,24 @@ export class WorkspacesController {
       // Map joinPolicy to join_policy and normalize the value
       let joinPolicy = 'request'; // default value
       if (body.joinPolicy) {
-        // Map "requests" to "request", "invite_only" stays the same, etc.
-        switch (body.joinPolicy.toLowerCase()) {
-          case 'requests':
-          case 'request':
+        // Map frontend values to backend enum values
+        switch (body.joinPolicy) {
+          case 'Anyone':
+            joinPolicy = 'open';
+            break;
+          case 'Requests':
             joinPolicy = 'request';
+            break;
+          case 'Invites':
+            joinPolicy = 'invite_only';
             break;
           case 'open':
             joinPolicy = 'open';
             break;
+          case 'request':
+            joinPolicy = 'request';
+            break;
           case 'invite_only':
-          case 'invite-only':
             joinPolicy = 'invite_only';
             break;
           default:
@@ -296,66 +314,132 @@ export class WorkspacesController {
         }
       }
 
-      // Add the authenticated user ID to the body for workspace creation
+      // Prepare workspace data
       const workspaceData = {
         title: body.title,
-        description: body.description,
+        description: body.description || '',
         tags: parsedTags,
-        join_policy: joinPolicy, // Use join_policy instead of joinPolicy
-        user_id: tokenValidation.user.id,
-        // image: file ? file.originalname : undefined, // TODO: Implement proper file storage
+        join_policy: joinPolicy,
+        user_id: userId, // Use the extracted and validated user ID
+        image: file, // Pass the multer file object
       };
 
-      console.log(
-        '📤 [Gateway] Sending message to workspace service with data:',
-        JSON.stringify(workspaceData, null, 2),
-      );
+      console.log('📤 [Gateway] Sending to workspace service:', {
+        ...workspaceData,
+        image: file ? 'File object present' : 'No file',
+      });
+      console.log('🔍 [Gateway] User ID being sent:', userId);
 
-      const workspace = await firstValueFrom(
+      const result = await firstValueFrom(
         this.workspacesService
           .send({ cmd: 'create-workspace' }, workspaceData)
           .pipe(
-            timeout(10000), // 10 second timeout for create operation
+            timeout(30000), // Increase timeout for image upload
+            catchError((error) => {
+              console.error(
+                '❌ [Gateway] Error from workspace service:',
+                error,
+              );
+              throw new HttpException(
+                error.message || 'Error creating workspace',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+              );
+            }),
           ),
       );
 
-      console.log(
-        '✅ [Gateway] Successfully received response from workspace service:',
-        workspace,
-      );
-      return workspace;
+      console.log('✅ [Gateway] Workspace created successfully:', result);
+      return result;
     } catch (error) {
       console.error('❌ [Gateway] Error in createWorkspace:', error);
-      if (error instanceof HttpException) {
-        throw error;
-      }
       throw new HttpException(
-        'Error creating workspace',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        error.message || 'Error creating workspace',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  @Post('update-workspace')
+  @Put(':workspaceId')
+  @UseInterceptors(FileInterceptor('image')) // Handle image file upload
   async updateWorkspace(
-    @Body()
-    body: {
-      workspace_id: string;
-      title?: string;
-      description?: string;
-      tags?: string[];
-    },
+    @Param('workspaceId') workspaceId: string,
+    @UploadedFile() file: any,
+    @Body() body: any,
+    @Headers('authorization') authHeader: string,
   ) {
-    //Will check with dto in the service
     try {
+      console.log('🔄 [Gateway] Update workspace called for ID:', workspaceId);
+      console.log('📁 [Gateway] File upload:', file ? 'Present' : 'None');
+      console.log('📝 [Gateway] Body data:', body);
+
+      // Validate token and get user information
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+
+      if (!userId) {
+        console.error('❌ [Gateway] User ID not found in token');
+        throw new HttpException('User ID not found', HttpStatus.UNAUTHORIZED);
+      }
+
+      console.log('👤 [Gateway] User ID from token:', userId);
+
+      // Parse tags if they come as string
+      let tags = body.tags;
+      if (typeof tags === 'string') {
+        try {
+          tags = JSON.parse(tags);
+        } catch (e) {
+          // If parsing fails, split by comma as fallback
+          tags = tags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag);
+        }
+      }
+
+      // Map joinPolicy to join_policy and convert to proper format
+      let joinPolicy = body.joinPolicy || body.join_policy;
+      if (joinPolicy === 'Anyone') joinPolicy = 'open';
+      else if (joinPolicy === 'Requests') joinPolicy = 'request';
+      else if (joinPolicy === 'Invites') joinPolicy = 'invite_only';
+
+      // Prepare update data
+      const updateData: any = {
+        workspace_id: workspaceId,
+        user_id: userId,
+        title: body.title,
+        description: body.description,
+        join_policy: joinPolicy, // Use proper enum value
+        tags: tags,
+      };
+
+      // Add file data if present
+      if (file) {
+        console.log('📷 [Gateway] Processing image upload:', {
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+        });
+
+        updateData.image = {
+          buffer: file.buffer,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+        };
+      }
+
+      console.log('📤 [Gateway] Sending workspace update to service...');
       const workspace = await firstValueFrom(
-        this.workspacesService.send({ cmd: 'update-workspace' }, body),
+        this.workspacesService.send({ cmd: 'update-workspace' }, updateData).pipe(
+          timeout(30000), // 30 second timeout for file uploads
+        ),
       );
+
+      console.log('✅ [Gateway] Workspace updated successfully');
       return workspace;
     } catch (error) {
+      console.error('❌ [Gateway] Error updating workspace:', error);
       throw new HttpException(
-        'Error updating workspace',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        error.message || 'Error updating workspace',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

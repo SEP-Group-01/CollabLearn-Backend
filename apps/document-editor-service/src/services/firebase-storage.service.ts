@@ -15,6 +15,8 @@ export interface MediaUploadResult {
   firebasePath: string;
   downloadUrl: string;
   documentId: string;
+  workspaceId?: string;
+  threadId?: string;
   uploadedBy: string;
   uploadedAt: Date;
   metadata?: {
@@ -83,8 +85,18 @@ export class FirebaseStorageService {
     documentId: string,
     userId: string,
     threadId?: string,
+    workspaceId?: string,
+    imagePosition?: number,
   ): Promise<MediaUploadResult> {
-    this.logger.log(`Uploading file: ${file.originalname} for document: ${documentId}`);
+    this.logger.log(`🔥 [Firebase] Uploading file: ${file.originalname} for document: ${documentId}`);
+    this.logger.log(`🔥 [Firebase] File details:`, {
+      originalname: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype,
+      bufferType: typeof file.buffer,
+      isBuffer: Buffer.isBuffer(file.buffer),
+      hasData: !!file.buffer
+    });
 
     // Validate file
     this.validateFile(file);
@@ -96,14 +108,42 @@ export class FirebaseStorageService {
     // Determine file category and path
     const category = this.getFileCategory(file.mimetype);
     
-    // If threadId is provided, use thread-based structure, otherwise fall back to document-based
-    const firebasePath = threadId 
-      ? `threads/${threadId}/documents/${documentId}/media/${category}/${filename}`
-      : `documents/${documentId}/media/${category}/${filename}`;
+    // Use the new workspace/thread structure for editor images
+    let firebasePath: string;
+    if (workspaceId && threadId) {
+      // Editor image path: workspaces/{workspace_id}/threads/{thread_id}/editor/{document_id}/images/{image_id}/{filename}
+      firebasePath = `workspaces/${workspaceId}/threads/${threadId}/editor/${documentId}/images/${fileId}/${filename}`;
+    } else if (threadId) {
+      // Legacy thread-based structure for backward compatibility
+      firebasePath = `threads/${threadId}/documents/${documentId}/media/${category}/${filename}`;
+    } else {
+      // Legacy document-based structure for backward compatibility
+      firebasePath = `documents/${documentId}/media/${category}/${filename}`;
+    }
+
+    this.logger.log(`🔥 [Firebase] Target path: ${firebasePath}`);
 
     try {
       // Upload to Firebase Storage
       const fileUpload = this.bucket.file(firebasePath);
+      
+      // Convert file.buffer to proper Buffer if it's not already
+      let fileBuffer: Buffer;
+      if (Buffer.isBuffer(file.buffer)) {
+        fileBuffer = file.buffer;
+      } else if (file.buffer && typeof file.buffer === 'object') {
+        // Handle serialized buffer from microservice
+        const bufferData = file.buffer as any;
+        if (bufferData.type === 'Buffer' && Array.isArray(bufferData.data)) {
+          fileBuffer = Buffer.from(bufferData.data);
+        } else {
+          throw new Error('Invalid buffer format received from microservice');
+        }
+      } else {
+        throw new Error('No valid file buffer found');
+      }
+
+      this.logger.log(`🔥 [Firebase] Buffer prepared, size: ${fileBuffer.length} bytes`);
       
       const stream = fileUpload.createWriteStream({
         metadata: {
@@ -113,16 +153,29 @@ export class FirebaseStorageService {
             uploadedBy: userId,
             documentId: documentId,
             threadId: threadId,
+            workspaceId: workspaceId,
             fileId: fileId,
+            ...(imagePosition !== undefined && { imagePosition: imagePosition.toString() }),
+            category: category,
           },
         },
       });
 
       await new Promise((resolve, reject) => {
-        stream.on('error', reject);
-        stream.on('finish', resolve);
-        stream.end(file.buffer);
+        stream.on('error', (error) => {
+          this.logger.error(`🔥 [Firebase] Stream error:`, error);
+          reject(error);
+        });
+        stream.on('finish', () => {
+          this.logger.log(`🔥 [Firebase] Stream finished successfully`);
+          resolve(undefined);
+        });
+        
+        this.logger.log(`🔥 [Firebase] Starting stream write...`);
+        stream.end(fileBuffer);
       });
+
+      this.logger.log(`🔥 [Firebase] File uploaded, generating download URL...`);
 
       // Generate download URL
       const [downloadUrl] = await fileUpload.getSignedUrl({
@@ -130,10 +183,15 @@ export class FirebaseStorageService {
         expires: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
       });
 
+      this.logger.log(`🔥 [Firebase] Download URL generated: ${downloadUrl.substring(0, 100)}...`);
+
       // Process metadata (dimensions, duration, etc.)
-      const metadata = await this.extractMetadata(file, fileId, documentId, category, threadId);
+      this.logger.log(`🔥 [Firebase] Extracting metadata...`);
+      const metadata = await this.extractMetadata(file, fileId, documentId, category, threadId, workspaceId);
+      this.logger.log(`🔥 [Firebase] Metadata extracted:`, metadata);
 
       // Save metadata to database
+      this.logger.log(`🔥 [Firebase] Saving to database...`);
       const mediaRecord = await this.databaseService.saveMediaMetadata({
         document_id: documentId,
         filename: filename,
@@ -145,8 +203,10 @@ export class FirebaseStorageService {
         uploaded_by: userId,
         ...metadata,
       });
+      this.logger.log(`🔥 [Firebase] Database record saved:`, mediaRecord.id);
 
       // Log audit entry
+      this.logger.log(`🔥 [Firebase] Creating audit log entry...`);
       await this.databaseService.logAuditEntry({
         document_id: documentId,
         user_id: userId,
@@ -157,6 +217,8 @@ export class FirebaseStorageService {
           size: file.size,
           mimeType: file.mimetype,
           threadId: threadId,
+          workspaceId: workspaceId,
+          ...(imagePosition !== undefined && { imagePosition }),
         },
       });
 
@@ -169,6 +231,8 @@ export class FirebaseStorageService {
         firebasePath: firebasePath,
         downloadUrl: downloadUrl,
         documentId: documentId,
+        workspaceId: workspaceId,
+        threadId: threadId,
         uploadedBy: userId,
         uploadedAt: new Date(),
         metadata: {
@@ -179,7 +243,7 @@ export class FirebaseStorageService {
         },
       };
 
-      this.logger.log(`File uploaded successfully: ${firebasePath}`);
+      this.logger.log(`✅ [Firebase] Upload completed successfully: ${firebasePath}`);
       return result;
 
     } catch (error) {
@@ -406,6 +470,7 @@ export class FirebaseStorageService {
     documentId: string,
     category: string,
     threadId?: string,
+    workspaceId?: string,
   ): Promise<{
     width?: number;
     height?: number;
@@ -415,28 +480,45 @@ export class FirebaseStorageService {
     const metadata: any = {};
 
     try {
+      // Convert file.buffer to proper Buffer for metadata extraction
+      let fileBuffer: Buffer;
+      if (Buffer.isBuffer(file.buffer)) {
+        fileBuffer = file.buffer;
+      } else if (file.buffer && typeof file.buffer === 'object') {
+        const bufferData = file.buffer as any;
+        if (bufferData.type === 'Buffer' && Array.isArray(bufferData.data)) {
+          fileBuffer = Buffer.from(bufferData.data);
+        } else {
+          this.logger.warn('Invalid buffer format for metadata extraction');
+          return metadata;
+        }
+      } else {
+        this.logger.warn('No valid file buffer for metadata extraction');
+        return metadata;
+      }
+
       if (category === 'images') {
         // For production, you would use a library like 'sharp' to extract image metadata
         // and generate thumbnails
-        const imageInfo = await this.getImageInfo(file.buffer);
+        const imageInfo = await this.getImageInfo(fileBuffer);
         metadata.width = imageInfo.width;
         metadata.height = imageInfo.height;
 
         // Generate thumbnail
-        const thumbnailPath = await this.generateImageThumbnail(file, fileId, documentId, threadId);
+        const thumbnailPath = await this.generateImageThumbnail(file, fileId, documentId, threadId, workspaceId);
         metadata.thumbnail_firebase_path = thumbnailPath;
       }
 
       if (category === 'videos') {
         // For production, you would use a library like 'ffmpeg' to extract video metadata
         // and generate thumbnails
-        const videoInfo = await this.getVideoInfo(file.buffer);
+        const videoInfo = await this.getVideoInfo(fileBuffer);
         metadata.width = videoInfo.width;
         metadata.height = videoInfo.height;
         metadata.duration_seconds = videoInfo.duration;
 
         // Generate video thumbnail
-        const thumbnailPath = await this.generateVideoThumbnail(file, fileId, documentId, threadId);
+        const thumbnailPath = await this.generateVideoThumbnail(file, fileId, documentId, threadId, workspaceId);
         metadata.thumbnail_firebase_path = thumbnailPath;
       }
     } catch (error) {
@@ -463,14 +545,23 @@ export class FirebaseStorageService {
     fileId: string,
     documentId: string,
     threadId?: string,
+    workspaceId?: string,
   ): Promise<string> {
     // Placeholder implementation
     // In production, use sharp to generate thumbnail:
     // const thumbnail = await sharp(file.buffer).resize(200, 200).jpeg().toBuffer();
     
-    const thumbnailPath = threadId 
-      ? `threads/${threadId}/documents/${documentId}/media/images/thumbnails/${fileId}_thumb.jpg`
-      : `documents/${documentId}/media/images/thumbnails/${fileId}_thumb.jpg`;
+    let thumbnailPath: string;
+    if (workspaceId && threadId) {
+      // Use workspace/thread structure for editor images
+      thumbnailPath = `workspaces/${workspaceId}/threads/${threadId}/editor/${documentId}/images/${fileId}/thumbnails/${fileId}_thumb.jpg`;
+    } else if (threadId) {
+      // Legacy thread-based structure
+      thumbnailPath = `threads/${threadId}/documents/${documentId}/media/images/thumbnails/${fileId}_thumb.jpg`;
+    } else {
+      // Legacy document-based structure
+      thumbnailPath = `documents/${documentId}/media/images/thumbnails/${fileId}_thumb.jpg`;
+    }
     
     try {
       const thumbnailFile = this.bucket.file(thumbnailPath);
@@ -482,6 +573,7 @@ export class FirebaseStorageService {
             originalFileId: fileId,
             documentId: documentId,
             threadId: threadId,
+            workspaceId: workspaceId,
           },
         },
       });
@@ -507,13 +599,22 @@ export class FirebaseStorageService {
     fileId: string,
     documentId: string,
     threadId?: string,
+    workspaceId?: string,
   ): Promise<string> {
     // Placeholder implementation
     // In production, use ffmpeg to extract frame and sharp to process:
     
-    const thumbnailPath = threadId 
-      ? `threads/${threadId}/documents/${documentId}/media/videos/thumbnails/${fileId}_thumb.jpg`
-      : `documents/${documentId}/media/videos/thumbnails/${fileId}_thumb.jpg`;
+    let thumbnailPath: string;
+    if (workspaceId && threadId) {
+      // Use workspace/thread structure for editor videos
+      thumbnailPath = `workspaces/${workspaceId}/threads/${threadId}/editor/${documentId}/images/${fileId}/thumbnails/${fileId}_thumb.jpg`;
+    } else if (threadId) {
+      // Legacy thread-based structure
+      thumbnailPath = `threads/${threadId}/documents/${documentId}/media/videos/thumbnails/${fileId}_thumb.jpg`;
+    } else {
+      // Legacy document-based structure
+      thumbnailPath = `documents/${documentId}/media/videos/thumbnails/${fileId}_thumb.jpg`;
+    }
     
     try {
       const thumbnailFile = this.bucket.file(thumbnailPath);
@@ -525,6 +626,7 @@ export class FirebaseStorageService {
             originalFileId: fileId,
             documentId: documentId,
             threadId: threadId,
+            workspaceId: workspaceId,
           },
         },
       });

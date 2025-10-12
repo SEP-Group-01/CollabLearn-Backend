@@ -147,11 +147,41 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async removeCollaborator(documentId: string, userId: string): Promise<void> {
     const key = `document:${documentId}:collaborators`;
     await this.redis.srem(key, userId);
+    
+    // Also remove user info
+    const userInfoKey = `document:${documentId}:user:${userId}`;
+    await this.redis.del(userInfoKey);
   }
 
   async getCollaborators(documentId: string): Promise<string[]> {
     const key = `document:${documentId}:collaborators`;
     return await this.redis.smembers(key);
+  }
+
+  // User Information Management
+  async setUserInfo(documentId: string, userId: string, userInfo: any): Promise<void> {
+    const key = `document:${documentId}:user:${userId}`;
+    await this.redis.setex(key, 3600, JSON.stringify(userInfo)); // 1 hour TTL
+  }
+
+  async getUserInfo(documentId: string, userId: string): Promise<any | null> {
+    const key = `document:${documentId}:user:${userId}`;
+    const data = await this.redis.get(key);
+    return data ? JSON.parse(data) : null;
+  }
+
+  async getAllUserInfo(documentId: string): Promise<Record<string, any>> {
+    const collaborators = await this.getCollaborators(documentId);
+    const userInfos: Record<string, any> = {};
+    
+    for (const userId of collaborators) {
+      const userInfo = await this.getUserInfo(documentId, userId);
+      if (userInfo) {
+        userInfos[userId] = userInfo;
+      }
+    }
+    
+    return userInfos;
   }
 
   // Real-time Event Publishing

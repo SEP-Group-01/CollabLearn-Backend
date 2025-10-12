@@ -100,19 +100,44 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
     try {
       this.logger.log(`User ${data.userId} joining document ${data.documentId}`);
       
+      // Extract user information from WebSocket handshake query
+      const query = client.handshake.query;
+      const userInfo = {
+        id: data.userId,
+        name: query.userName as string || 'Unknown User',
+        avatar: query.userAvatar as string || 'U',
+        color: query.userColor as string || '#4caf50',
+      };
+      
       // Add client to document room
       this.addClientToDocument(data.documentId, client);
       
       const result = await this.documentEditorService
-        .send('document.join', { documentId: data.documentId, userId: data.userId })
+        .send('document.join', { 
+          documentId: data.documentId, 
+          userId: data.userId,
+          userInfo: userInfo
+        })
         .toPromise();
       
       client.emit('document:joined', result);
 
-      // Notify other clients
+      // Get updated collaborator list
+      const collaboratorsResult = await this.documentEditorService
+        .send('document.collaborators', { documentId: data.documentId })
+        .toPromise();
+
+      // Notify all clients about the updated user list
+      this.broadcastToDocument(data.documentId, {
+        event: 'user-update',
+        type: 'user-update',
+        data: { users: collaboratorsResult.collaborators || [] },
+      });
+
+      // Also notify about collaborator joined
       this.broadcastToDocument(data.documentId, {
         event: 'collaborator:joined',
-        data: { userId: data.userId, documentId: data.documentId },
+        data: { userId: data.userId, documentId: data.documentId, userInfo: userInfo },
       }, client);
       
     } catch (error) {
@@ -138,11 +163,23 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
       
       client.emit('document:left', result);
 
-      // Notify other clients
+      // Get updated collaborator list
+      const collaboratorsResult = await this.documentEditorService
+        .send('document.collaborators', { documentId: data.documentId })
+        .toPromise();
+
+      // Notify all remaining clients about the updated user list
+      this.broadcastToDocument(data.documentId, {
+        event: 'user-update',
+        type: 'user-update',
+        data: { users: collaboratorsResult.collaborators || [] },
+      });
+
+      // Also notify about collaborator left
       this.broadcastToDocument(data.documentId, {
         event: 'collaborator:left',
         data: { userId: data.userId, documentId: data.documentId },
-      }, client);
+      });
       
     } catch (error) {
       this.logger.error('Error leaving document:', error);
@@ -339,12 +376,15 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
           break;
           
         case 'cursor-update':
-          // Handle cursor update - broadcast to other collaborators
-          this.broadcastToDocument(message.documentId, {
-            event: 'cursor-update',
-            userId: message.userId,
-            data: message.data,
-          }, client);
+          // Handle cursor update - publish to Redis for proper distribution
+          await this.handleCursorUpdate(
+            {
+              documentId: message.documentId,
+              userId: message.userId,
+              cursor: message.data?.cursor || message.data,
+            },
+            client
+          );
           break;
           
         case 'awareness-update':
@@ -359,6 +399,11 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
           );
           break;
           
+        case 'user-list-request':
+          // Handle request for current user list
+          await this.handleUserListRequest(message.documentId, client);
+          break;
+          
         default:
           this.logger.warn(`Unknown collaboration event type: ${message.type}`);
       }
@@ -366,6 +411,54 @@ export class DocumentEditorGateway implements OnGatewayConnection, OnGatewayDisc
     } catch (error) {
       this.logger.error('Error handling collaboration event:', error);
       client.emit('error', { message: 'Failed to process collaboration event' });
+    }
+  }
+
+  /**
+   * Handle request for current document collaborators
+   */
+  async handleUserListRequest(documentId: string, client: Socket) {
+    try {
+      this.logger.log(`User list request for document ${documentId}`);
+      
+      // Get current collaborators from the document service
+      const result = await this.documentEditorService
+        .send('document.collaborators', { documentId })
+        .toPromise();
+      
+      // Send the user list to the requesting client
+      client.emit('collaboration-event', {
+        event: 'user-update',
+        type: 'user-update',
+        data: { users: result.collaborators || [] },
+      });
+      
+    } catch (error) {
+      this.logger.error('Error getting user list:', error);
+      client.emit('error', { message: 'Failed to get user list' });
+    }
+  }
+
+  async handleCursorUpdate(data: { documentId: string; userId: string; cursor: any }, client: Socket) {
+    try {
+      // Send cursor update to document service to publish to Redis
+      await this.documentEditorService
+        .send('document.cursor.update', {
+          documentId: data.documentId,
+          userId: data.userId,
+          cursor: data.cursor,
+        })
+        .toPromise();
+      
+    } catch (error) {
+      this.logger.error('Error handling cursor update:', error);
+      // Fallback to direct broadcast if document service fails
+      this.broadcastToDocument(data.documentId, {
+        event: 'cursor-update',
+        type: 'cursor-update',
+        userId: data.userId,
+        data: { cursor: data.cursor },
+      }, client);
     }
   }
 }

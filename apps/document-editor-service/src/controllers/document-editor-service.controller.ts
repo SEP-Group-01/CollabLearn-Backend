@@ -52,6 +52,13 @@ export class DocumentEditorServiceController {
     return this.documentEditorServiceService.updateAwareness(data);
   }
 
+  @MessagePattern('document.cursor.update')
+  async updateCursor(
+    @Payload() data: { documentId: string; userId: string; cursor: any },
+  ) {
+    return this.documentEditorServiceService.updateCursor(data);
+  }
+
   @MessagePattern('document.update')
   async updateDocument(
     @Payload()
@@ -71,10 +78,11 @@ export class DocumentEditorServiceController {
   }
 
   @MessagePattern('document.join')
-  async joinDocument(@Payload() data: { documentId: string; userId: string }) {
+  async joinDocument(@Payload() data: { documentId: string; userId: string; userInfo?: any }) {
     return this.documentEditorServiceService.joinDocument(
       data.documentId,
       data.userId,
+      data.userInfo,
     );
   }
 
@@ -172,6 +180,9 @@ export class DocumentEditorServiceController {
       file: Express.Multer.File;
       documentId: string;
       userId: string;
+      workspaceId?: string;
+      threadId?: string;
+      imagePosition?: number;
     },
   ) {
     return this.documentEditorServiceService.uploadMedia(data);
