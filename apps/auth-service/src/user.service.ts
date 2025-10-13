@@ -184,4 +184,62 @@ export class UserService {
       reset_password_expires: undefined,
     });
   }
+
+  async getUserStats(userId: string): Promise<{
+    workspaceCount: number;
+    totalStudyHours: number;
+    completedTasks: number;
+  }> {
+    const supabase = this.supabaseService.getClient();
+
+    try {
+      // Get workspace count (user is a member)
+      const { count: workspaceCount, error: workspaceError } = await supabase
+        .from('workspace_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      if (workspaceError) {
+        console.error('Error fetching workspace count:', workspaceError);
+      }
+
+      // Get total study hours from user_progress
+      const { data: progressData, error: progressError } = await supabase
+        .from('user_progress')
+        .select('actual_time_spent')
+        .eq('user_id', userId);
+
+      if (progressError) {
+        console.error('Error fetching study hours:', progressError);
+      }
+
+      const totalStudyHours = progressData
+        ? progressData.reduce((total, progress) => total + (progress.actual_time_spent || 0), 0) / 60 // Convert minutes to hours
+        : 0;
+
+      // Get completed tasks count
+      const { count: completedTasks, error: completedError } = await supabase
+        .from('user_progress')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .in('completion_status', ['completed', 'needs_revision']);
+
+      if (completedError) {
+        console.error('Error fetching completed tasks:', completedError);
+      }
+
+      return {
+        workspaceCount: workspaceCount || 0,
+        totalStudyHours: Math.round((totalStudyHours || 0) * 100) / 100, // Round to 2 decimal places
+        completedTasks: completedTasks || 0,
+      };
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+      return {
+        workspaceCount: 0,
+        totalStudyHours: 0,
+        completedTasks: 0,
+      };
+    }
+  }
 }

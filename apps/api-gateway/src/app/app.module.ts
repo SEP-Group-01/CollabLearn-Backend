@@ -88,10 +88,10 @@ import { QuizGateway } from './gateways/quiz.gateway';
   controllers: [
     AuthController,
     WorkspacesController,
-    ResourceController, // Add resource controller
+    ResourceController,
     ThreadsController,
     QueryController,
-    DocumentEditorController, // Add document editor controller
+    DocumentEditorController,
     ForumController,
     DocumentEditorController,
     QuizController,

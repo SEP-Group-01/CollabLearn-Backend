@@ -200,4 +200,66 @@ export class AuthController {
       );
     }
   }
+
+  @Get('user')
+  async getUser(@Headers('authorization') authHeader: string) {
+    let token: string;
+
+    // Extract token from Authorization header
+    if (authHeader) {
+      // Remove 'Bearer ' prefix if present
+      token = authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : authHeader;
+    } else {
+      throw new HttpException(
+        'Authorization header is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Get user attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'get_user_details' }, { token }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.UNAUTHORIZED,
+      );
+    }
+  }
+
+  @Post('edit-user')
+  async editUser(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { first_name?: string; last_name?: string; image_file?: string; remove_image?: boolean }
+  ) {
+    let token: string;
+
+    // Extract token from Authorization header
+    if (authHeader) {
+      token = authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : authHeader;
+    } else {
+      throw new HttpException(
+        'Authorization header is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Edit user attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'edit_user' }, { token, ...body }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }

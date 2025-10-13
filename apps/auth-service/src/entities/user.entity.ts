@@ -10,6 +10,7 @@ export interface User {
   email_verification_token?: string;
   reset_password_token?: string;
   reset_password_expires?: Date;
+  image_url?: string;
   created_at: Date;
   updated_at: Date;
 }
