@@ -42,32 +42,37 @@ import { QuizGateway } from './gateways/quiz.gateway';
       {
         name: 'RESOURCE_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3008 }, // RESOURCE_SERVICE_TCP_PORT
-        //options: { host: 'resource-service', port: 3008 }
+        // Use host.docker.internal to connect from Docker container to host machine
+        options: { host: 'host.docker.internal', port: 3008 }, // RESOURCE_SERVICE_TCP_PORT
+        //options: { host: 'localhost', port: 3008 }, // Use this if running gateway on host
+        //options: { host: 'resource-service', port: 3008 } // Use this if both in Docker
       },
     ]),
     ClientsModule.register([
       {
         name: 'FORUM_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3004 }, // FORUM_TCP_PORT
-        //options: { host: 'forum-service', port: 3004 }
+        options: { host: 'host.docker.internal', port: 3004 }, // FORUM_TCP_PORT
+        //options: { host: 'localhost', port: 3004 }, // Use this if running gateway on host
+        //options: { host: 'forum-service', port: 3004 } // Use this if both in Docker
       },
     ]),
     ClientsModule.register([
       {
         name: 'DOCUMENT_EDITOR_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3006 }, // DOCUMENT_EDITOR_SERVICE_PORT
-        //options: { host: 'document-editor-service', port: 3006 }
+        options: { host: 'host.docker.internal', port: 3006 }, // DOCUMENT_EDITOR_SERVICE_PORT
+        //options: { host: 'localhost', port: 3006 }, // Use this if running gateway on host
+        //options: { host: 'document-editor-service', port: 3006 } // Use this if both in Docker
       },
     ]),
     ClientsModule.register([
       {
         name: 'QUIZ_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3007 }, // QUIZ_SERVICE_PORT
-        //options: { host: 'quiz-service', port: 3007 }
+        options: { host: 'host.docker.internal', port: 3007 }, // QUIZ_SERVICE_PORT
+        //options: { host: 'localhost', port: 3007 }, // Use this if running gateway on host
+        //options: { host: 'quiz-service', port: 3007 } // Use this if both in Docker
       },
     ]),
     ClientsModule.registerAsync([

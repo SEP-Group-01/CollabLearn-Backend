@@ -22,7 +22,10 @@ export class ResourceController {
   constructor(
     @Inject('RESOURCE_SERVICE')
     private readonly resourceService: ClientProxy,
-  ) {}
+  ) {
+    console.log('🔧 [API Gateway] ResourceController initialized');
+    console.log('📡 [API Gateway] RESOURCE_SERVICE ClientProxy injected:', !!this.resourceService);
+  }
 
   // Resource Management Routes
   @Get(':workspaceId/threads/:threadId/links')
@@ -30,15 +33,27 @@ export class ResourceController {
     @Param('workspaceId') workspaceId: string,
     @Param('threadId') threadId: string,
   ) {
+    console.log('🌐 [API Gateway] GET /links request received');
+    console.log('📋 [API Gateway] Params:', { workspaceId, threadId });
+    
     try {
+      console.log('📤 [API Gateway] Sending TCP message: get-thread-links');
       const result = await firstValueFrom(
         this.resourceService.send(
           { cmd: 'get-thread-links' },
           { workspaceId, threadId },
         ),
       );
+      console.log('✅ [API Gateway] Received response from resource service');
+      console.log('📦 [API Gateway] Response data:', result);
       return result;
     } catch (error) {
+      console.error('❌ [API Gateway] Error fetching thread links:', error);
+      console.error('📋 [API Gateway] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       throw new HttpException(
         'Error fetching thread links',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -79,15 +94,27 @@ export class ResourceController {
     @Param('workspaceId') workspaceId: string,
     @Param('threadId') threadId: string,
   ) {
+    console.log('🌐 [API Gateway] GET /documents request received');
+    console.log('📋 [API Gateway] Params:', { workspaceId, threadId });
+    
     try {
+      console.log('📤 [API Gateway] Sending TCP message: get-thread-documents');
       const result = await firstValueFrom(
         this.resourceService.send(
           { cmd: 'get-thread-documents' },
           { workspaceId, threadId },
         ),
       );
+      console.log('✅ [API Gateway] Received response from resource service');
+      console.log('📦 [API Gateway] Response data:', result);
       return result;
     } catch (error) {
+      console.error('❌ [API Gateway] Error fetching thread documents:', error);
+      console.error('📋 [API Gateway] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       throw new HttpException(
         'Error fetching thread documents',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -133,15 +160,27 @@ export class ResourceController {
     @Param('workspaceId') workspaceId: string,
     @Param('threadId') threadId: string,
   ) {
+    console.log('🌐 [API Gateway] GET /videos request received');
+    console.log('📋 [API Gateway] Params:', { workspaceId, threadId });
+    
     try {
+      console.log('📤 [API Gateway] Sending TCP message: get-thread-videos');
       const result = await firstValueFrom(
         this.resourceService.send(
           { cmd: 'get-thread-videos' },
           { workspaceId, threadId },
         ),
       );
+      console.log('✅ [API Gateway] Received response from resource service');
+      console.log('📦 [API Gateway] Response data:', result);
       return result;
     } catch (error) {
+      console.error('❌ [API Gateway] Error fetching thread videos:', error);
+      console.error('📋 [API Gateway] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       throw new HttpException(
         'Error fetching thread videos',
         HttpStatus.INTERNAL_SERVER_ERROR,

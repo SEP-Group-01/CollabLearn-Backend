@@ -18,4 +18,10 @@ import * as path from 'path';
   controllers: [ResourceController, ResourceTcpController],
   providers: [ResourceService, SupabaseService, FirebaseAdminService],
 })
-export class ResourceServiceModule {}
+export class ResourceServiceModule {
+  constructor() {
+    console.log('🔧 ResourceServiceModule initialized');
+    console.log('📋 Controllers registered: ResourceController, ResourceTcpController');
+    console.log('📋 Providers registered: ResourceService, SupabaseService, FirebaseAdminService');
+  }
+}

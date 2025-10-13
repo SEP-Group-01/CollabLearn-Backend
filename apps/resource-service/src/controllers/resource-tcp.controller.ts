@@ -4,12 +4,19 @@ import { MessagePattern } from '@nestjs/microservices';
 
 @Controller()
 export class ResourceTcpController {
-  constructor(private readonly resourceService: ResourceService) {}
+  constructor(private readonly resourceService: ResourceService) {
+    console.log('🔧 [TCP Controller] ResourceTcpController initialized');
+    console.log('✅ [TCP Controller] ResourceService injected:', !!this.resourceService);
+  }
 
   // Resource management message patterns
   @MessagePattern({ cmd: 'get-thread-links' })
   getThreadLinks(data: { workspaceId: string; threadId: string }) {
-    return this.resourceService.getResources(data.threadId, 'link');
+    console.log('📥 [TCP Controller] Received get-thread-links message');
+    console.log('📋 [TCP Controller] Data:', data);
+    const result = this.resourceService.getResources(data.threadId, 'link');
+    console.log('📤 [TCP Controller] Returning links result');
+    return result;
   }
 
   @MessagePattern({ cmd: 'create-thread-link' })
@@ -34,7 +41,11 @@ export class ResourceTcpController {
 
   @MessagePattern({ cmd: 'get-thread-documents' })
   getThreadDocuments(data: { workspaceId: string; threadId: string }) {
-    return this.resourceService.getResources(data.threadId, 'document');
+    console.log('📥 [TCP Controller] Received get-thread-documents message');
+    console.log('📋 [TCP Controller] Data:', data);
+    const result = this.resourceService.getResources(data.threadId, 'document');
+    console.log('📤 [TCP Controller] Returning documents result');
+    return result;
   }
 
   @MessagePattern({ cmd: 'create-thread-document' })
@@ -58,7 +69,11 @@ export class ResourceTcpController {
 
   @MessagePattern({ cmd: 'get-thread-videos' })
   getThreadVideos(data: { workspaceId: string; threadId: string }) {
-    return this.resourceService.getResources(data.threadId, 'video');
+    console.log('📥 [TCP Controller] Received get-thread-videos message');
+    console.log('📋 [TCP Controller] Data:', data);
+    const result = this.resourceService.getResources(data.threadId, 'video');
+    console.log('📤 [TCP Controller] Returning videos result');
+    return result;
   }
 
   @MessagePattern({ cmd: 'create-thread-video' })
