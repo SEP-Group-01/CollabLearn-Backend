@@ -12,30 +12,25 @@ import { CreateMessageDto } from '../dto/create-message.dto';
 import { CreateReplyDto } from '../dto/create-reply.dto';
 import { ToggleLikeDto } from '../dto/toggle-like.dto';
 import { MessageType, ReplyType, Author } from '../entities/forum.interfaces';
-import {
-  DbForumMessage,
-  DbForumReply,
-  DbMessageLike,
-  DbReplyLike,
-} from '../entities/database.types';
 
 @Injectable()
 export class ForumService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   async getGroupMessages(
-    groupId: number,
+    workspaceId: string, // UUID string
     userId: string, // UUID string
   ): Promise<MessageType[]> {
     const supabase = this.supabaseService.getClient();
 
-    // First, get all messages (parent messages only)
+    // First, get all messages (only main messages, no parent_id)
+    // Order by ascending (oldest first) so newest appear at bottom in chat
     const { data: messages, error: messagesError } = await supabase
       .from('messages')
-      .select('*')
-      .eq('workspace_id', groupId)
+      .select('*, reply_count')
+      .eq('workspace_id', workspaceId)
       .is('parent_id', null)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true });
 
     if (messagesError) {
       throw new BadRequestException(
@@ -47,23 +42,17 @@ export class ForumService {
       return [];
     }
 
-    // Get all replies for these messages
+    // Get all replies from the dedicated replies table
     const messageIds = messages.map((msg) => msg.id);
+    console.log('📝 Fetching replies for message IDs:', messageIds);
+    
     const { data: replies } = await supabase
-      .from('messages')
+      .from('replies')
       .select('*')
-      .in('parent_id', messageIds)
+      .in('parent_message_id', messageIds)
       .order('created_at', { ascending: true });
 
-    // Get message likes
-    const { data: messageLikes } = await supabase
-      .from('message_likes')
-      .select('message_id, user_id')
-      .in('message_id', [...messageIds, ...(replies?.map((r) => r.id) || [])]);
-
-    if (!messages) {
-      return [];
-    }
+    console.log('💬 Found replies:', replies?.length || 0, replies);
 
     // Get all unique user IDs from messages and replies
     const userIds = new Set<string>();
@@ -72,7 +61,7 @@ export class ForumService {
     });
 
     replies?.forEach((reply: any) => {
-      userIds.add(reply.author_id);
+      userIds.add(reply.user_id); // Changed from author_id to user_id for replies table
     });
 
     // Get user auth data
@@ -99,6 +88,12 @@ export class ForumService {
       userProfileMap.set(profile.id, profile);
     });
 
+    // Get message likes for main messages only (replies don't have likes in this implementation)
+    const { data: messageLikes } = await supabase
+      .from('message_likes')
+      .select('message_id, user_id')
+      .in('message_id', messageIds);
+
     // Create likes maps
     const messageLikesMap = new Map<number, any[]>();
     messageLikes?.forEach((like: any) => {
@@ -108,17 +103,17 @@ export class ForumService {
       messageLikesMap.get(like.message_id)?.push(like);
     });
 
-    // Group replies by parent message
-    const repliesMap = new Map<number, any[]>();
+    // Group replies by parent message ID
+    const repliesMap = new Map<string, any[]>();
     replies?.forEach((reply: any) => {
-      if (!repliesMap.has(reply.parent_id)) {
-        repliesMap.set(reply.parent_id, []);
+      if (!repliesMap.has(reply.parent_message_id)) {
+        repliesMap.set(reply.parent_message_id, []);
       }
-      repliesMap.get(reply.parent_id)?.push(reply);
+      repliesMap.get(reply.parent_message_id)?.push(reply);
     });
 
     // Transform the data to match frontend interface
-    return messages.map((message: any) => {
+    const result = messages.map((message: any) => {
       const userAuth = userMap.get(message.author_id);
       const userProfile = userProfileMap.get(message.author_id);
       const messageLikes = messageLikesMap.get(message.id) || [];
@@ -139,21 +134,21 @@ export class ForumService {
           role: userProfile?.role || 'member',
         } as Author,
         timestamp: message.created_at,
-        isPinned: false, // Your schema doesn't have is_pinned
+        isPinned: false,
         likes: messageLikes.length,
         isLiked: messageLikes.some((like: any) => like.user_id === userId),
-        image: undefined, // Your schema doesn't have image_url
-        groupId: message.workspace_id,
+        image: undefined,
+        workspaceId: message.workspace_id,
+        reply_count: message.reply_count || messageReplies.length,
         replies: messageReplies.map((reply: any) => {
-          const replyUserAuth = userMap.get(reply.author_id);
-          const replyUserProfile = userProfileMap.get(reply.author_id);
-          const replyLikes = messageLikesMap.get(reply.id) || [];
+          const replyUserAuth = userMap.get(reply.user_id); // Changed from author_id to user_id
+          const replyUserProfile = userProfileMap.get(reply.user_id); // Changed from author_id to user_id
 
           return {
             id: reply.id,
             content: reply.content,
             author: {
-              id: replyUserAuth?.id || reply.author_id,
+              id: replyUserAuth?.id || reply.user_id, // Changed from author_id to user_id
               name:
                 replyUserProfile?.display_name ||
                 `${replyUserAuth?.first_name || ''} ${replyUserAuth?.last_name || ''}`.trim() ||
@@ -164,12 +159,24 @@ export class ForumService {
               role: replyUserProfile?.role || 'member',
             } as Author,
             timestamp: reply.created_at,
-            likes: replyLikes.length,
-            isLiked: replyLikes.some((like: any) => like.user_id === userId),
+            likes: 0, // Replies don't have likes in current implementation
+            isLiked: false,
           };
         }),
       } as MessageType;
     });
+
+    console.log(
+      '🎯 Final messages with replies:',
+      result.map((msg) => ({
+        id: msg.id,
+        content: msg.content.substring(0, 50) + '...',
+        replies: msg.replies.length,
+        repliesData: msg.replies.map(r => ({ id: r.id, content: r.content.substring(0, 20) }))
+      })),
+    );
+
+    return result;
   }
 
   async createMessage(
@@ -181,7 +188,7 @@ export class ForumService {
       .from('messages')
       .insert({
         content: createMessageDto.content,
-        workspace_id: createMessageDto.groupId,
+        workspace_id: createMessageDto.workspaceId,
         author_id: createMessageDto.authorId,
         parent_id: null, // For now, we'll handle replies separately
         created_at: new Date().toISOString(),
@@ -234,7 +241,7 @@ export class ForumService {
       likes: 0,
       isLiked: false,
       image: undefined, // Your schema doesn't have image_url
-      groupId: message.workspace_id,
+      workspaceId: message.workspace_id, // Changed from groupId to workspaceId
       replies: [],
     };
   }
@@ -242,24 +249,25 @@ export class ForumService {
   async createReply(createReplyDto: CreateReplyDto): Promise<ReplyType> {
     const supabase = this.supabaseService.getClient();
 
-    // Check if message exists and get workspace_id
-    const { data: messageExists } = await supabase
+    // First, verify that the parent message exists
+    const { data: messageExists, error: messageError } = await supabase
       .from('messages')
       .select('id, workspace_id')
       .eq('id', createReplyDto.messageId)
       .single();
 
-    if (!messageExists) {
-      throw new NotFoundException('Message not found');
+    if (messageError || !messageExists) {
+      throw new NotFoundException('Parent message not found');
     }
 
+    // Insert reply into the dedicated replies table
     const { data: reply, error } = await supabase
-      .from('messages')
+      .from('replies')
       .insert({
         content: createReplyDto.content,
-        parent_id: createReplyDto.messageId,
-        author_id: createReplyDto.authorId,
-        workspace_id: (messageExists as any).workspace_id,
+        parent_message_id: createReplyDto.messageId,
+        user_id: createReplyDto.authorId,
+        workspace_id: messageExists.workspace_id,
         created_at: new Date().toISOString(),
       })
       .select('*')
@@ -273,21 +281,21 @@ export class ForumService {
     const { data: userAuth } = await supabase
       .from('users')
       .select('id, first_name, last_name, email')
-      .eq('id', reply.author_id)
+      .eq('id', reply.user_id)
       .single();
 
     // Get user profile for the author
     const { data: userProfile } = await supabase
       .from('user_profiles')
       .select('id, display_name, avatar, role')
-      .eq('id', reply.author_id)
+      .eq('id', reply.user_id)
       .single();
 
     return {
       id: reply.id,
       content: reply.content,
       author: {
-        id: userAuth?.id || reply.author_id,
+        id: userAuth?.id || reply.user_id,
         name:
           userProfile?.display_name ||
           `${userAuth?.first_name || ''} ${userAuth?.last_name || ''}`.trim() ||

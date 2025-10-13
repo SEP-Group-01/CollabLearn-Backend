@@ -94,11 +94,36 @@ export class RedisBridgeService implements OnModuleInit, OnModuleDestroy {
 
         case 'awareness-update':
           this.gateway.broadcastToDocument(documentId, {
-            event: 'awareness:update',
+            event: 'awareness-update',
+            type: 'awareness-update',
+            userId: eventData.data.userId,
+            documentId: documentId,
             data: {
-              documentId: documentId,
-              userId: eventData.data.userId,
-              awareness: eventData.data.awareness,
+              user: eventData.data.awareness || eventData.data.user,
+            },
+          });
+          break;
+
+        case 'cursor-update':
+          this.gateway.broadcastToDocument(documentId, {
+            event: 'cursor-update',
+            type: 'cursor-update',
+            userId: eventData.data.userId,
+            documentId: documentId,
+            data: {
+              cursor: eventData.data.cursor,
+            },
+          });
+          break;
+
+        case 'content-update':
+          this.gateway.broadcastToDocument(documentId, {
+            event: 'content-update',
+            type: 'content-update',
+            userId: eventData.data.userId,
+            documentId: documentId,
+            data: {
+              content: eventData.data.content,
             },
           });
           break;
@@ -160,8 +185,8 @@ export class RedisBridgeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private extractDocumentIdFromChannel(channel: string): string | null {
-    // Channel format: document:{documentId}
-    const match = channel.match(/^document:(.+)$/);
+    // Channel format: document:{documentId}:events
+    const match = channel.match(/^document:([^:]+):events$/);
     return match ? match[1] : null;
   }
 

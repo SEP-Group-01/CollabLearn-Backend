@@ -24,7 +24,7 @@ export interface MessageType {
   replies: ReplyType[];
   isLiked: boolean;
   image?: string;
-  groupId: number;
+  workspaceId: string; // Changed from groupId number to workspaceId string
 }
 
 export interface Group {

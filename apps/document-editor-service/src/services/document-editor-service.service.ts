@@ -212,9 +212,6 @@ export class DocumentEditorServiceService {
     });
 
     try {
-      // Generate document ID if not provided
-      const documentId = data.documentId || `doc_${Date.now()}`;
-
       // Create Y.js document with proper initialization
       const ydoc = new Y.Doc();
       const ytext = ydoc.getText('content');
@@ -228,17 +225,14 @@ export class DocumentEditorServiceService {
       // Get Y.js state as buffer - ensure it's valid
       const yjsState = Y.encodeStateAsUpdate(ydoc);
       if (!yjsState || yjsState.length === 0) {
-        this.logger.warn(`Generated empty Y.js state for document ${documentId}, creating minimal state`);
+        this.logger.warn(`Generated empty Y.js state, creating minimal state`);
         // Force a small update to ensure valid state
         ytext.insert(ytext.length, '');
         const newYjsState = Y.encodeStateAsUpdate(ydoc);
         this.logger.debug(`Created Y.js state with length: ${newYjsState.length}`);
       }
 
-      // Store document in our map before database operations
-      this.documents.set(documentId, ydoc);
-
-      // Store in Supabase database
+      // Store in Supabase database - let database auto-generate the ID
       const dbDocument = await this.databaseService.createDocument({
         title: data.title || 'New Document',
         content: ytext.toString(),
@@ -250,7 +244,10 @@ export class DocumentEditorServiceService {
 
       this.logger.log(`✅ Document created in database: ${dbDocument.id}`);
 
-      // Save to Redis for real-time collaboration
+      // Store document in our map after getting the database-generated ID
+      this.documents.set(dbDocument.id, ydoc);
+
+      // Save to Redis for real-time collaboration using the database-generated ID
       await this.redisService.saveYjsDocument(dbDocument.id, ydoc);
 
       // Set up document permissions for the creator
@@ -390,6 +387,16 @@ export class DocumentEditorServiceService {
       // Save to Redis after content change
       await this.redisService.saveYjsDocument(data.documentId, ydoc);
       
+      // Publish content update event to Redis for real-time sync
+      await this.redisService.publishDocumentEvent(data.documentId, {
+        type: 'content-update',
+        data: {
+          userId: data.userId,
+          content: data.content,
+          operation: data.operation,
+        },
+      });
+      
       // Also save to database for persistence
       try {
         await this.databaseService.updateDocument(data.documentId, {
@@ -419,16 +426,21 @@ export class DocumentEditorServiceService {
     return { deleted, documentId };
   }
 
-  async joinDocument(documentId: string, userId: string) {
+  async joinDocument(documentId: string, userId: string, userInfo?: any) {
     this.logger.log(`User ${userId} joining document: ${documentId}`);
+
+    // Store complete user information in Redis (not just ID)
+    if (userInfo) {
+      await this.redisService.setUserInfo(documentId, userId, userInfo);
+    }
 
     // Add to Redis collaborators
     await this.redisService.addCollaborator(documentId, userId);
 
-    // Publish join event
+    // Publish join event with user info
     await this.redisService.publishDocumentEvent(documentId, {
       type: 'user-join',
-      data: { userId },
+      data: { userId, userInfo },
     });
 
     const ydoc = await this.getOrCreateDocument(documentId);
@@ -495,15 +507,59 @@ export class DocumentEditorServiceService {
     };
   }
 
+  async updateCursor(data: {
+    documentId: string;
+    userId: string;
+    cursor: any;
+  }) {
+    this.logger.log(
+      `Updating cursor for user ${data.userId} in document: ${data.documentId}`,
+    );
+
+    // Publish cursor update event to Redis for real-time sync
+    await this.redisService.publishDocumentEvent(data.documentId, {
+      type: 'cursor-update',
+      data: {
+        userId: data.userId,
+        cursor: data.cursor,
+      },
+    });
+
+    return {
+      documentId: data.documentId,
+      userId: data.userId,
+      cursor: data.cursor,
+    };
+  }
+
   async getCollaborators(documentId: string) {
     this.logger.log(`Getting collaborators for document: ${documentId}`);
 
     const activeCollaborators = await this.redisService.getCollaborators(documentId);
     const awarenessData = await this.redisService.getUserAwareness(documentId);
+    const userInfos = await this.redisService.getAllUserInfo(documentId);
+
+    // Convert user IDs to full user objects and deduplicate
+    const collaboratorMap = new Map();
+    
+    activeCollaborators.forEach(userId => {
+      if (!collaboratorMap.has(userId)) {
+        const userInfo = userInfos[userId];
+        collaboratorMap.set(userId, userInfo || {
+          id: userId,
+          name: 'Unknown User',
+          avatar: 'U',
+          color: '#4caf50',
+          isActive: true
+        });
+      }
+    });
+
+    const collaboratorObjects = Array.from(collaboratorMap.values());
 
     return {
       documentId,
-      collaborators: activeCollaborators,
+      collaborators: collaboratorObjects,
       awareness: awarenessData,
     };
   }
@@ -630,8 +686,18 @@ export class DocumentEditorServiceService {
     file: Express.Multer.File;
     documentId: string;
     userId: string;
+    workspaceId?: string;
+    threadId?: string;
+    imagePosition?: number;
   }) {
-    return await this.mediaService.uploadFile(data.file, data.documentId, data.userId);
+    return this.firebaseStorageService.uploadFile(
+      data.file, 
+      data.documentId, 
+      data.userId, 
+      data.threadId, 
+      data.workspaceId, 
+      data.imagePosition
+    );
   }
 
   async getDocumentMedia(documentId: string) {

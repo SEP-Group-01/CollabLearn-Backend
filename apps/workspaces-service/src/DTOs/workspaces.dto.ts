@@ -33,10 +33,13 @@ export class CreateWorkspaceDto {
   @IsOptional()
   tags?: string[];
 
-  // Image handling will be implemented separately with file storage
-  // @IsString()
-  // @IsOptional()
-  // image?: string; // For file uploads
+  // Image handling - the actual file will be passed separately via multer
+  @IsOptional()
+  image?: any; // This will be the multer file object
+
+  @IsString()
+  @IsOptional()
+  image_url?: string; // For storing the final image URL after upload
 }
 
 export class UpdateWorkspaceDto {
@@ -59,6 +62,18 @@ export class UpdateWorkspaceDto {
   @IsEnum(JoinPolicy)
   @IsOptional()
   join_policy?: JoinPolicy;
+
+  @IsString()
+  @IsNotEmpty()
+  user_id: string; // User making the update
+
+  // Image handling
+  @IsOptional()
+  image?: any; // Multer file object for new image
+
+  @IsString()
+  @IsOptional()
+  image_url?: string; // For storing the final image URL after upload
 }
 
 export class WorkspaceResponseDto {
@@ -68,7 +83,7 @@ export class WorkspaceResponseDto {
   join_policy: JoinPolicy;
   admin_ids: string[];
   tags?: string[];
-  // image?: string; // Will be added when image storage is implemented
+  image_url?: string; // Added image URL to response
   created_at: string;
   updated_at: string;
 }
