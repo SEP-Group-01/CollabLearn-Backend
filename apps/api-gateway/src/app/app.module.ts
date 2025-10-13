@@ -26,14 +26,16 @@ import { QuizGateway } from './gateways/quiz.gateway';
       {
         name: 'AUTH_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3002 },
+        // options: { host: 'localhost', port: 3002 },
+        options: { host: 'auth-service', port: 3002 },
       },
     ]),
     ClientsModule.register([
       {
         name: 'WORKSPACES_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'localhost', port: 3003 },
+        // options: { host: 'localhost', port: 3003 },
+        options: { host: 'workspaces-service', port: 3003 },
       },
     ]),
     ClientsModule.register([
@@ -41,6 +43,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
         name: 'RESOURCE_SERVICE',
         transport: Transport.TCP,
         options: { host: 'localhost', port: 3008 }, // RESOURCE_SERVICE_TCP_PORT
+        //options: { host: 'resource-service', port: 3008 }
       },
     ]),
     ClientsModule.register([
@@ -48,6 +51,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
         name: 'FORUM_SERVICE',
         transport: Transport.TCP,
         options: { host: 'localhost', port: 3004 }, // FORUM_TCP_PORT
+        //options: { host: 'forum-service', port: 3004 }
       },
     ]),
     ClientsModule.register([
@@ -55,6 +59,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
         name: 'DOCUMENT_EDITOR_SERVICE',
         transport: Transport.TCP,
         options: { host: 'localhost', port: 3006 }, // DOCUMENT_EDITOR_SERVICE_PORT
+        //options: { host: 'document-editor-service', port: 3006 }
       },
     ]),
     ClientsModule.register([
@@ -62,6 +67,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
         name: 'QUIZ_SERVICE',
         transport: Transport.TCP,
         options: { host: 'localhost', port: 3007 }, // QUIZ_SERVICE_PORT
+        //options: { host: 'quiz-service', port: 3007 }
       },
     ]),
     ClientsModule.registerAsync([

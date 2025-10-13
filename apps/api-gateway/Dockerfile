@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for NestJS API Gateway
 
 # Stage 1: Dependencies and build
-FROM node:18-alpine AS builder
+FROM node:20-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -21,14 +21,14 @@ RUN npm ci
 RUN npm run build api-gateway
 
 # Stage 2: Production runtime
-FROM node:18-alpine AS production
+FROM node:20-slim AS production
 
 # Create app directory
 WORKDIR /app
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
+RUN groupadd -g 1001 nodejs && \
+    useradd -r -u 1001 -g nodejs nestjs
 
 # Copy package files from root
 COPY package*.json ./
