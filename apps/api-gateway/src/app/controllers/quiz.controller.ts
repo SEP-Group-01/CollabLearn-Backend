@@ -72,8 +72,8 @@ export class QuizController {
     };
   }
 
-  // Root endpoint
-  @Get()
+  // Root endpoint - made more specific to avoid conflict with :id route
+  @Get('info')
   root(): { message: string; endpoints: string[] } {
     return {
       message: 'Quiz Service API Gateway',
@@ -264,7 +264,7 @@ export class QuizController {
   }
 
   // Get all quizzes
-  @Get()
+  @Get('list')
   async getQuizzes(@Query('workspaceId') workspaceId?: string) {
     console.log('Fetching quizzes for workspace:', workspaceId);
 

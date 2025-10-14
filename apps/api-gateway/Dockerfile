@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for NestJS API Gateway
 
 # Stage 1: Dependencies and build
-FROM node:18-alpine AS builder
+FROM node:20-slim AS builder
 
 # Set working directory
 WORKDIR /app
