@@ -460,8 +460,77 @@ export class WorkspacesService {
 
     const supabase = this.supabaseService.getClient();
     try {
-      // Query to get workspaces ordered by member count
-      const { data: workspaceData, error: workspaceError } = await supabase
+      // Use efficient approach to get top workspaces by member count
+      // First get workspace IDs with highest member counts using raw SQL via RPC
+      console.log('📊 [WorkspaceService] Fetching top workspace IDs by member count...');
+      
+      const { data: topWorkspaceIds, error: memberCountError } = await supabase
+        .rpc('get_workspace_member_counts', { workspace_limit: limit });
+
+      let workspaceIds: string[] = [];
+      let memberCountMap = new Map<string, number>();
+
+      if (memberCountError || !topWorkspaceIds) {
+        console.log('❌ [WorkspaceService] RPC function not available, using manual count approach:', memberCountError?.message);
+        
+        // Fallback: Get distinct workspace IDs from workspace_members and count manually
+        const { data: distinctWorkspaces, error: distinctError } = await supabase
+          .from('workspace_members')
+          .select('workspace_id')
+          .order('workspace_id');
+
+        if (distinctError) {
+          console.error('❌ [WorkspaceService] Error fetching workspace member data:', distinctError);
+          throw new RpcException({
+            status: 500,
+            message: 'Error fetching workspace member data',
+          });
+        }
+
+        if (!distinctWorkspaces || distinctWorkspaces.length === 0) {
+          console.log('✅ [WorkspaceService] No workspaces with members found');
+          return [];
+        }
+
+        // Get unique workspace IDs and count members for each
+        const uniqueWorkspaceIds = [...new Set(distinctWorkspaces.map(w => w.workspace_id))];
+        
+        const workspaceWithCounts = await Promise.all(
+          uniqueWorkspaceIds.map(async (id) => {
+            const count = await this.getWorkspaceMembersCount(id);
+            return { workspace_id: id, count };
+          })
+        );
+
+        // Sort by count and take top 'limit'
+        const sortedWorkspaces = workspaceWithCounts
+          .sort((a, b) => b.count - a.count)
+          .slice(0, limit);
+
+        workspaceIds = sortedWorkspaces.map(w => w.workspace_id);
+        memberCountMap = new Map(sortedWorkspaces.map(w => [w.workspace_id, w.count]));
+      } else {
+        // Use the RPC function result
+        workspaceIds = topWorkspaceIds.map((row: any) => row.workspace_id);
+        memberCountMap = new Map(
+          topWorkspaceIds.map((row: any) => [row.workspace_id, parseInt(row.member_count) || 0])
+        );
+      }
+
+      if (workspaceIds.length === 0) {
+        console.log('✅ [WorkspaceService] No workspaces with members found');
+        return [];
+      }
+
+      console.log(
+        '📋 [WorkspaceService] Found top workspace IDs:',
+        workspaceIds,
+        'with member counts:',
+        Array.from(memberCountMap.entries())
+      );
+
+      // Now fetch full workspace details for these top workspaces
+      const { data: topWorkspaces, error: workspaceError } = await supabase
         .from('workspaces')
         .select(`
           id,
@@ -472,28 +541,37 @@ export class WorkspacesService {
           created_at,
           updated_at
         `)
-        .order('created_at', { ascending: false })
-        .limit(limit * 2); // Get more initially to filter and sort by member count
+        .in('id', workspaceIds);
 
       if (workspaceError) {
-        console.error('❌ [WorkspaceService] Error fetching workspaces:', workspaceError);
+        console.error('❌ [WorkspaceService] Error fetching workspace details:', workspaceError);
         throw new RpcException({
           status: 500,
-          message: 'Error fetching workspaces data',
+          message: 'Error fetching workspace details',
         });
       }
 
-      if (!workspaceData || workspaceData.length === 0) {
-        console.log('✅ [WorkspaceService] No workspaces found');
+      if (!topWorkspaces || topWorkspaces.length === 0) {
+        console.log('✅ [WorkspaceService] No workspace details found');
         return [];
       }
 
-      // Get member count for each workspace and add metadata
+      // Sort workspaces by their member count to maintain the correct order
+      const sortedWorkspaces = topWorkspaces.sort((a, b) => {
+        const countA = memberCountMap.get(a.id) || 0;
+        const countB = memberCountMap.get(b.id) || 0;
+        return countB - countA;
+      });
+
+      // Get metadata for each workspace
+      console.log('🔄 [WorkspaceService] Adding metadata to top workspaces...');
       const workspacesWithMetadata = await Promise.all(
-        workspaceData.map(async (workspace) => {
+        sortedWorkspaces.map(async (workspace) => {
           const workspaceTags = await this.getWorkspaceTags(workspace.id);
           const workspaceAdmins = await this.getWorkspaceAdmins(workspace.id);
-          const membersCount = await this.getWorkspaceMembersCount(workspace.id);
+          
+          // Get member count from our map
+          const membersCount = memberCountMap.get(workspace.id) || 0;
 
           // Get user role if userId is provided
           let userRole = 'user'; // default role for non-authenticated users
@@ -517,17 +595,12 @@ export class WorkspacesService {
         }),
       );
 
-      // Sort by member count (descending) and limit results
-      const topWorkspaces = workspacesWithMetadata
-        .sort((a, b) => b.members_count - a.members_count)
-        .slice(0, limit);
-
       console.log(
         '✅ [WorkspaceService] getTopWorkspaces successful, found',
-        topWorkspaces?.length || 0,
-        'workspaces',
+        workspacesWithMetadata?.length || 0,
+        'workspaces with accurate member counts'
       );
-      return topWorkspaces;
+      return workspacesWithMetadata;
     } catch (error) {
       console.error(
         '❌ [WorkspaceService] Error fetching top workspaces:',

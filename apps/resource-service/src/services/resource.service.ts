@@ -156,26 +156,48 @@ export class ResourceService {
   }
 
   async getResources(threadId: string, resourceType?: string) {
+    console.log('🔍 [Resource Service] getResources called');
+    console.log('📋 [Resource Service] Parameters:', { threadId, resourceType });
+    
     const supabase = this.supabaseService.getClient();
+    console.log('✅ [Resource Service] Supabase client obtained');
+    
     try {
       let query = supabase
         .from('thread_resources')
         .select('*')
         .eq('thread_id', threadId);
 
+      console.log('🔍 [Resource Service] Building query for thread_id:', threadId);
+
       // Filter by resource type if provided
       if (resourceType) {
+        console.log('🔍 [Resource Service] Filtering by resource_type:', resourceType);
         query = query.eq('resource_type', resourceType);
       }
 
+      console.log('📤 [Resource Service] Executing Supabase query...');
       const { data, error } = await query.order('created_at', {
         ascending: false,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ [Resource Service] Supabase error:', error);
+        throw error;
+      }
+      
+      console.log('✅ [Resource Service] Query successful');
+      console.log('📦 [Resource Service] Results count:', data?.length || 0);
+      console.log('📦 [Resource Service] Data:', data);
+      
       return data;
     } catch (error) {
-      console.error('Error fetching resources:', error);
+      console.error('❌ [Resource Service] Error fetching resources:', error);
+      console.error('📋 [Resource Service] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       throw new Error('Failed to fetch resources');
     }
   }

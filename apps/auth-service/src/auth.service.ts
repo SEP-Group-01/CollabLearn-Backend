@@ -7,6 +7,8 @@ import { User } from './entities/user.entity';
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
 import { RpcException } from '@nestjs/microservices';
+import { createDecipheriv } from 'crypto';
+import { FirebaseStorageService } from './services/firebase-storage.service';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +19,7 @@ export class AuthService {
     private jwtService: JwtService,
     private emailService: EmailService,
     private configService: ConfigService,
+    private firebaseStorageService: FirebaseStorageService,
   ) {
     this.googleClient = new OAuth2Client(
       this.configService.get('GOOGLE_CLIENT_ID'),
@@ -254,7 +257,9 @@ export class AuthService {
           email: user.email,
           first_name: user.first_name,
           last_name: user.last_name,
+          created_at: user.created_at,
           email_verified: user.email_verified,
+          image_url: user.image_url,
         },
       };
     } catch (error) {
@@ -305,5 +310,145 @@ export class AuthService {
 
   getHello(): string {
     return 'Hello World!';
+  }
+
+  async getUserDetails(token: string) {
+    try {
+      // First validate the token and get basic user info
+      const tokenValidation = await this.validateToken(token);
+      
+      if (!tokenValidation.valid) {
+        throw new RpcException({
+          status: 401,
+          message: 'Invalid token',
+        });
+      }
+
+      const userId = tokenValidation.user.id;
+
+      // Get user stats
+      const stats = await this.userService.getUserStats(userId);
+
+      return {
+        user: {
+          ...tokenValidation.user,
+          image_url: tokenValidation.user.image_url,
+          stats: {
+            workspaceCount: stats.workspaceCount,
+            studyHours: stats.totalStudyHours,
+            completedTasks: stats.completedTasks,
+          },
+        },
+      };
+    } catch (error) {
+      throw new RpcException({
+        status: error.status || 401,
+        message: error.message || 'Failed to get user details',
+      });
+    }
+  }
+
+  async editUser(data: {
+    token: string;
+    first_name?: string;
+    last_name?: string;
+    image_file?: string; // base64 encoded image
+    remove_image?: boolean;
+  }) {
+    try {
+      // Validate token first
+      const tokenValidation = await this.validateToken(data.token);
+      
+      if (!tokenValidation.valid) {
+        throw new RpcException({
+          status: 401,
+          message: 'Invalid token',
+        });
+      }
+
+      const userId = tokenValidation.user.id;
+      const updateData: any = {};
+
+      // Update names if provided
+      if (data.first_name !== undefined) {
+        updateData.first_name = data.first_name;
+      }
+      if (data.last_name !== undefined) {
+        updateData.last_name = data.last_name;
+      }
+
+      // Handle image upload/removal
+      if (data.remove_image) {
+        // Remove current image if exists
+        const currentUser = await this.userService.findUserById(userId);
+        if (currentUser?.image_url) {
+          // Extract file path from URL and delete from Firebase
+          const urlParts = currentUser.image_url.split('/');
+          const pathIndex = urlParts.findIndex(part => part === 'users');
+          if (pathIndex !== -1) {
+            const filePath = urlParts.slice(pathIndex).join('/');
+            await this.firebaseStorageService.deleteUserImage(filePath);
+          }
+        }
+        updateData.image_url = null;
+      } else if (data.image_file) {
+        // Upload new image
+        try {
+          // Convert base64 to buffer
+          const base64Data = data.image_file.replace(/^data:image\/[a-z]+;base64,/, '');
+          const imageBuffer = Buffer.from(base64Data, 'base64');
+          
+          // Determine MIME type from data URL
+          const mimeTypeMatch = data.image_file.match(/^data:(image\/[a-z]+);base64,/);
+          const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+
+          // Delete old image if exists
+          const currentUser = await this.userService.findUserById(userId);
+          if (currentUser?.image_url) {
+            const urlParts = currentUser.image_url.split('/');
+            const pathIndex = urlParts.findIndex(part => part === 'users');
+            if (pathIndex !== -1) {
+              const filePath = urlParts.slice(pathIndex).join('/');
+              await this.firebaseStorageService.deleteUserImage(filePath);
+            }
+          }
+
+          // Upload new image
+          const uploadResult = await this.firebaseStorageService.uploadUserImage(
+            imageBuffer,
+            userId,
+            mimeType,
+          );
+          
+          updateData.image_url = uploadResult.downloadUrl;
+        } catch (error) {
+          throw new RpcException({
+            status: 400,
+            message: 'Failed to upload image',
+          });
+        }
+      }
+
+      // Update user in database
+      const updatedUser = await this.userService.updateUser(userId, updateData);
+
+      return {
+        message: 'User updated successfully',
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          first_name: updatedUser.first_name,
+          last_name: updatedUser.last_name,
+          image_url: updatedUser.image_url,
+          email_verified: updatedUser.email_verified,
+          created_at: updatedUser.created_at,
+        },
+      };
+    } catch (error) {
+      throw new RpcException({
+        status: error.status || 500,
+        message: error.message || 'Failed to update user',
+      });
+    }
   }
 }

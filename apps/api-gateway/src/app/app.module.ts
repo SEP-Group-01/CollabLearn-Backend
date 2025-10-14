@@ -108,6 +108,8 @@ import { StudyPlanService } from './services/study-plan.service';
     QueryController,
     DocumentEditorController,
     ForumController,
+    DocumentEditorController,
+    ForumController,
     QuizController,
     ThreadQuizController,
     KafkaReplyController,
