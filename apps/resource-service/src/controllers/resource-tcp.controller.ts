@@ -27,6 +27,7 @@ export class ResourceTcpController {
     title: string;
     description?: string;
     url: string;
+    estimated_completion_time?: number;
   }) {
     const resourceData = {
       thread_id: data.threadId,
@@ -35,6 +36,7 @@ export class ResourceTcpController {
       title: data.title,
       description: data.description,
       url: data.url,
+      estimated_completion_time: data.estimated_completion_time || 0,
     };
     return this.resourceService.createResource(resourceData);
   }
@@ -56,6 +58,7 @@ export class ResourceTcpController {
     title: string;
     description?: string;
     file: any; // File buffer from multipart
+    estimated_completion_time?: number;
   }) {
     const resourceData = {
       thread_id: data.threadId,
@@ -63,6 +66,7 @@ export class ResourceTcpController {
       resource_type: 'document' as const,
       title: data.title,
       description: data.description,
+      estimated_completion_time: data.estimated_completion_time || 0,
     };
     return this.resourceService.createResource(resourceData, data.file);
   }
@@ -84,6 +88,7 @@ export class ResourceTcpController {
     title: string;
     description?: string;
     file: any; // File buffer from multipart
+    estimated_completion_time?: number;
   }) {
     const resourceData = {
       thread_id: data.threadId,
@@ -91,6 +96,7 @@ export class ResourceTcpController {
       resource_type: 'video' as const,
       title: data.title,
       description: data.description,
+      estimated_completion_time: data.estimated_completion_time || 0,
     };
     return this.resourceService.createResource(resourceData, data.file);
   }
@@ -191,6 +197,36 @@ export class ResourceTcpController {
         review: data.review,
         ratings: data.ratings,
         attachment_url: data.attachment_url,
+      },
+    );
+  }
+
+  // User Progress message patterns
+  @MessagePattern({ cmd: 'get-user-progress' })
+  getUserProgress(data: {
+    userId: string;
+    resourceId: string;
+  }) {
+    console.log('📥 [TCP Controller] Received get-user-progress message');
+    console.log('📋 [TCP Controller] Data:', data);
+    return this.resourceService.getUserProgress(data.userId, data.resourceId);
+  }
+
+  @MessagePattern({ cmd: 'update-user-progress' })
+  updateUserProgress(data: {
+    userId: string;
+    resourceId: string;
+    completion_status: 'not_started' | 'in_progress' | 'completed' | 'needs_revision';
+    progress_percentage?: number;
+  }) {
+    console.log('📥 [TCP Controller] Received update-user-progress message');
+    console.log('📋 [TCP Controller] Data:', data);
+    return this.resourceService.updateUserProgress(
+      data.userId,
+      data.resourceId,
+      {
+        completion_status: data.completion_status,
+        progress_percentage: data.progress_percentage,
       },
     );
   }
