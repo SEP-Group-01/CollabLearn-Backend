@@ -1,250 +1,480 @@
-from pulp import LpProblem, LpVariable, LpMaximize, lpSum, LpBinary, LpStatus, value
-from models.study_plan import (
-    StudyPlanRequest, StudyPlanResult, StudyResource, TimeSlot, 
-    ScheduledTask, CompletionStatus, ResourceType
-)
-from typing import List, Dict, Tuple
-from datetime import datetime, timedelta
-import math
+"""
+Study Plan Generator Service
+Uses OpenAI API to intelligently schedule study tasks
+"""
+import os
+import logging
+import json
+from typing import List, Dict, Any, Tuple, Optional
+from datetime import datetime, date, time, timedelta
+from collections import defaultdict
+import openai
 
-def calculate_adjusted_time(resource: StudyResource) -> int:
-    """Calculate time needed based on completion status and resource type"""
-    base_time = resource.estimated_time_minutes
-    
-    if resource.completion_status == CompletionStatus.COMPLETED:
-        return 0
-    elif resource.completion_status == CompletionStatus.NEEDS_REVISION:
-        return int(base_time * 0.5)  # Half time for revision
-    elif resource.completion_status == CompletionStatus.IN_PROGRESS:
-        remaining = 1.0 - (resource.progress_percentage / 100.0)
-        return int(base_time * remaining)
-    else:  # NOT_STARTED
-        # Add buffer time for different resource types
-        if resource.type == ResourceType.VIDEO:
-            return int(base_time * 1.2)  # 20% buffer for pausing
-        elif resource.type == ResourceType.QUIZ:
-            return int(base_time * 1.5)  # 50% buffer for thinking
-        else:
-            return base_time
+from models.study_plan import ResourceInput, SlotInput, SchedulingRules
+
+logger = logging.getLogger(__name__)
+
+# Initialize OpenAI
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+if not openai.api_key:
+    logger.warning("OpenAI API key not found. Will use fallback scheduling algorithm.")
+
 
 def generate_optimized_study_plan(
-    request: StudyPlanRequest, 
-    time_slots: List[TimeSlot],
-    workspace_resources: Dict[str, List[StudyResource]]
-) -> Tuple[StudyPlanResult, str]:
+    user_id: str,
+    slots: List[Dict[str, Any]],
+    resources: List[Dict[str, Any]],
+    max_weeks: int,
+    revision_ratio: float,
+    scheduling_rules: Dict[str, Any],
+    user_progress: Dict[str, Dict[str, Any]],
+    plan_start_date: date
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
-    Advanced OR-based study plan generation with multi-workspace optimization
+    Generate an optimized study plan using OpenAI or fallback algorithm
+    
+    Returns:
+        Tuple of (scheduled_tasks, metadata)
     """
-    
-    # Prepare all resources from selected workspaces/threads
-    all_resources = []
-    for workspace_id, resources in workspace_resources.items():
-        if workspace_id in request.workspace_ids:
-            selected_thread_ids = request.selected_threads.get(workspace_id, [])
-            for resource in resources:
-                if resource.thread_id in selected_thread_ids:
-                    all_resources.append(resource)
-    
-    # Sort resources by sequence number within threads
-    all_resources.sort(key=lambda x: (x.workspace_id, x.thread_id, x.sequence_number))
-    
-    # Calculate available time slots
-    total_available_minutes = sum(slot.duration_minutes for slot in time_slots if slot.is_available)
-    
-    # Calculate required time for all resources
-    total_required_minutes = sum(calculate_adjusted_time(r) for r in all_resources)
-    
-    if total_available_minutes == 0:
-        return None, "No available time slots found"
-    
-    # Calculate weeks available
-    if request.deadline:
-        weeks_available = max(1, (request.deadline - datetime.now().date()).days // 7)
-    else:
-        weeks_available = math.ceil(total_required_minutes / (request.weekly_hours_available * 60))
-    
-    # Create optimization problem
-    prob = LpProblem("MultiWorkspaceStudyPlan", LpMaximize)
-    
-    # Decision variables: x[r][s][w] = 1 if resource r is assigned to slot s in week w
-    n_resources = len(all_resources)
-    n_slots = len(time_slots)
-    n_weeks = weeks_available
-    
-    # Binary variables for assignment
-    x = {}
-    for r in range(n_resources):
-        for s in range(n_slots):
-            for w in range(n_weeks):
-                x[(r, s, w)] = LpVariable(f"x_{r}_{s}_{w}", cat=LpBinary)
-    
-    # Objective: Maximize coverage (weighted by priority and resource type)
-    priority_weights = {
-        ResourceType.QUIZ: 3.0,  # Higher priority for quizzes
-        ResourceType.VIDEO: 2.0,
-        ResourceType.DOCUMENT: 1.5,
-        ResourceType.READING: 1.0,
-        ResourceType.LINK: 1.0
-    }
-    
-    objective = lpSum([
-        x[(r, s, w)] * priority_weights.get(all_resources[r].type, 1.0)
-        for r in range(n_resources)
-        for s in range(n_slots)
-        for w in range(n_weeks)
-    ])
-    prob += objective
-    
-    # Constraints
-    
-    # 1. Each resource can be assigned to at most one slot
-    for r in range(n_resources):
-        prob += lpSum([x[(r, s, w)] for s in range(n_slots) for w in range(n_weeks)]) <= 1
-    
-    # 2. Each time slot can have at most one resource per week
-    for s in range(n_slots):
-        for w in range(n_weeks):
-            prob += lpSum([x[(r, s, w)] for r in range(n_resources)]) <= 1
-    
-    # 3. Time constraint: resource time must fit in slot
-    for r in range(n_resources):
-        for s in range(n_slots):
-            for w in range(n_weeks):
-                resource_time = calculate_adjusted_time(all_resources[r])
-                if resource_time > time_slots[s].duration_minutes:
-                    prob += x[(r, s, w)] == 0
-    
-    # 4. Sequence constraint: maintain order within threads
-    for i in range(n_resources - 1):
-        for j in range(i + 1, n_resources):
-            res_i = all_resources[i]
-            res_j = all_resources[j]
-            
-            # If same thread and sequence, maintain order
-            if (res_i.thread_id == res_j.thread_id and 
-                res_i.sequence_number < res_j.sequence_number):
-                
-                # res_i must be scheduled before res_j
-                for w_i in range(n_weeks):
-                    for w_j in range(w_i + 1):
-                        prob += lpSum([x[(i, s, w_i)] for s in range(n_slots)]) >= \
-                               lpSum([x[(j, s, w_j)] for s in range(n_slots)])
-    
-    # 5. Workload balancing constraint (if requested)
-    if request.balance_workload:
-        avg_resources_per_week = len(all_resources) / n_weeks
-        for w in range(n_weeks):
-            week_assignments = lpSum([x[(r, s, w)] for r in range(n_resources) for s in range(n_slots)])
-            prob += week_assignments <= avg_resources_per_week * 1.5  # Allow 50% deviation
-            prob += week_assignments >= avg_resources_per_week * 0.5
-    
-    # Solve the problem
-    prob.solve()
-    
-    if LpStatus[prob.status] != 'Optimal':
-        return None, f"Optimization failed: {LpStatus[prob.status]}"
-    
-    # Extract solution
-    scheduled_tasks = []
-    scheduled_resources = set()
-    
-    for r in range(n_resources):
-        for s in range(n_slots):
-            for w in range(n_weeks):
-                if value(x[(r, s, w)]) == 1:
-                    resource = all_resources[r]
-                    time_slot = time_slots[s]
-                    
-                    scheduled_task = ScheduledTask(
-                        resource=resource,
-                        time_slot=time_slot,
-                        week_number=w + 1,
-                        allocated_time_minutes=calculate_adjusted_time(resource),
-                        workspace_id=resource.workspace_id,
-                        thread_id=resource.thread_id
-                    )
-                    scheduled_tasks.append(scheduled_task)
-                    scheduled_resources.add(r)
-    
-    # Calculate metrics
-    total_hours_allocated = sum(task.allocated_time_minutes for task in scheduled_tasks) / 60
-    total_hours_required = total_required_minutes / 60
-    coverage_percentage = (len(scheduled_resources) / len(all_resources)) * 100 if all_resources else 0
-    
-    # Find unscheduled resources
-    unscheduled_resources = [
-        all_resources[r] for r in range(n_resources) 
-        if r not in scheduled_resources
-    ]
-    
-    # Create optimization details
-    optimization_details = {
-        "algorithm": "Integer Linear Programming (PuLP)",
-        "objective_value": value(prob.objective),
-        "total_variables": len(x),
-        "solver_status": LpStatus[prob.status],
-        "resources_scheduled": len(scheduled_resources),
-        "resources_total": len(all_resources)
-    }
-    
-    # Generate message
-    if coverage_percentage == 100:
-        message = f"Perfect! All {len(all_resources)} resources scheduled across {n_weeks} weeks."
-    elif coverage_percentage >= 80:
-        message = f"Good coverage: {len(scheduled_resources)}/{len(all_resources)} resources scheduled. Consider adding more time slots for remaining {len(unscheduled_resources)} items."
-    else:
-        message = f"Limited coverage: Only {coverage_percentage:.1f}% of content can fit. Add more free slots or extend deadline to cover remaining {len(unscheduled_resources)} resources."
-    
-    result = StudyPlanResult(
-        user_id=request.user_id,
-        schedule=scheduled_tasks,
-        total_weeks=n_weeks,
-        total_hours_allocated=total_hours_allocated,
-        total_hours_required=total_hours_required,
-        coverage_percentage=coverage_percentage,
-        workspaces_included=request.workspace_ids,
-        message=message,
-        optimization_details=optimization_details,
-        unscheduled_resources=unscheduled_resources
-    )
-    
-    return result, None
-
-# Keep the old function for backward compatibility
-def generate_study_plan(request: StudyPlanRequest, free_slots):
-    """Legacy function - converts old format to new format"""
-    # Convert old format to new format
-    time_slots = []
-    for slot in free_slots:
-        time_slot = TimeSlot(
-            day_of_week=slot[0],
-            start_time=slot[1],
-            end_time=slot[2],
-            duration_minutes=60,  # Default 1 hour
-            is_available=True
-        )
-        time_slots.append(time_slot)
-    
-    # Create dummy workspace resources from focus areas
-    workspace_resources = {}
-    if hasattr(request, 'focus_areas') and request.focus_areas:
-        dummy_resources = []
-        for i, area in enumerate(request.focus_areas):
-            resource = StudyResource(
-                id=f"legacy_{i}",
-                name=area,
-                type=ResourceType.READING,
-                thread_id="legacy_thread",
-                sequence_number=i,
-                estimated_time_minutes=60,
-                workspace_id="legacy_workspace"
+    try:
+        # Try OpenAI-based scheduling first
+        if openai.api_key:
+            return generate_ai_study_plan(
+                user_id, slots, resources, max_weeks, revision_ratio,
+                scheduling_rules, user_progress, plan_start_date
             )
-            dummy_resources.append(resource)
-        workspace_resources["legacy_workspace"] = dummy_resources
-        
-        # Update request format
-        request.workspace_ids = ["legacy_workspace"]
-        request.selected_threads = {"legacy_workspace": ["legacy_thread"]}
-        request.weekly_hours_available = getattr(request, 'hours_per_day', 2) * 7
+        else:
+            # Fallback to rule-based scheduling
+            return generate_rule_based_study_plan(
+                user_id, slots, resources, max_weeks, revision_ratio,
+                scheduling_rules, user_progress, plan_start_date
+            )
     
-    return generate_optimized_study_plan(request, time_slots, workspace_resources)
+    except Exception as e:
+        logger.error(f"Error generating study plan: {e}")
+        # Always have a fallback
+        return generate_rule_based_study_plan(
+            user_id, slots, resources, max_weeks, revision_ratio,
+            scheduling_rules, user_progress, plan_start_date
+        )
+
+
+def generate_ai_study_plan(
+    user_id: str,
+    slots: List[Dict[str, Any]],
+    resources: List[Dict[str, Any]],
+    max_weeks: int,
+    revision_ratio: float,
+    scheduling_rules: Dict[str, Any],
+    user_progress: Dict[str, Dict[str, Any]],
+    plan_start_date: date
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Generate study plan using OpenAI API
+    """
+    logger.info("Generating AI-powered study plan...")
+    
+    # Prepare context for OpenAI
+    context = prepare_scheduling_context(slots, resources, max_weeks, revision_ratio, scheduling_rules, user_progress)
+    
+    # Create prompt for OpenAI
+    prompt = create_scheduling_prompt(context)
+    
+    try:
+        # Call OpenAI API
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an intelligent study planner that optimizes learning schedules based on cognitive science principles."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=3000
+        )
+        
+        # Parse AI response
+        ai_output = response.choices[0].message.content
+        scheduled_tasks = parse_ai_scheduling_output(ai_output, user_id, slots, resources, plan_start_date)
+        
+        # Calculate metadata
+        metadata = calculate_plan_metadata(scheduled_tasks, resources)
+        
+        logger.info(f"AI-generated plan with {len(scheduled_tasks)} tasks")
+        return scheduled_tasks, metadata
+    
+    except Exception as e:
+        logger.error(f"Error with OpenAI API: {e}, falling back to rule-based scheduling")
+        return generate_rule_based_study_plan(
+            user_id, slots, resources, max_weeks, revision_ratio,
+            scheduling_rules, user_progress, plan_start_date
+        )
+
+
+def generate_rule_based_study_plan(
+    user_id: str,
+    slots: List[Dict[str, Any]],
+    resources: List[Dict[str, Any]],
+    max_weeks: int,
+    revision_ratio: float,
+    scheduling_rules: Dict[str, Any],
+    user_progress: Dict[str, Dict[str, Any]],
+    plan_start_date: date
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Generate study plan using rule-based algorithm
+    """
+    logger.info("Generating rule-based study plan...")
+    
+    # Sort slots by week and day
+    sorted_slots = sorted(slots, key=lambda x: (x['week_number'], x['day_of_week'], x['start_time']))
+    
+    # Calculate remaining time for each resource
+    resource_time_map = {}
+    for resource in resources:
+        resource_id = str(resource['resource_id'])
+        remaining = resource['remaining_minutes']
+        
+        # Adjust based on user progress
+        if resource_id in user_progress:
+            progress_pct = user_progress[resource_id].get('completion_percentage', 0)
+            remaining = int(remaining * (100 - progress_pct) / 100)
+        
+        resource_time_map[resource_id] = {
+            'remaining_study_minutes': remaining,
+            'remaining_revision_minutes': int(remaining * revision_ratio) if resource.get('include_revision', False) else 0,
+            'resource': resource,
+            'last_scheduled_week': 0
+        }
+    
+    scheduled_tasks = []
+    workspace_last_scheduled = {}  # Track when each workspace was last scheduled
+    resource_consecutive_count = defaultdict(int)  # Track consecutive scheduling
+    
+    # Get scheduling rules
+    max_consecutive = scheduling_rules.get('max_consecutive_same_resource', 2)
+    mix_workspaces = scheduling_rules.get('mix_threads_across_workspaces', True)
+    balance_focus = scheduling_rules.get('balance_workspace_focus', True)
+    
+    # First pass: Schedule study tasks
+    for slot in sorted_slots:
+        slot_duration = calculate_slot_duration(slot['start_time'], slot['end_time'])
+        remaining_time = slot_duration
+        slot_date = calculate_slot_date(plan_start_date, slot['week_number'], slot['day_of_week'])
+        
+        while remaining_time > 0:
+            # Find next resource to schedule
+            best_resource = find_best_resource_for_slot(
+                resource_time_map,
+                slot,
+                workspace_last_scheduled,
+                resource_consecutive_count,
+                max_consecutive,
+                mix_workspaces,
+                balance_focus,
+                'study'
+            )
+            
+            if not best_resource:
+                break  # No more resources to schedule
+            
+            resource_id = best_resource
+            resource_info = resource_time_map[resource_id]
+            
+            # Allocate time
+            time_to_allocate = min(remaining_time, resource_info['remaining_study_minutes'])
+            
+            if time_to_allocate <= 0:
+                break
+            
+            # Create scheduled task
+            task = create_scheduled_task_dict(
+                user_id=user_id,
+                slot=slot,
+                slot_date=slot_date,
+                resource=resource_info['resource'],
+                allocated_minutes=time_to_allocate,
+                task_type='study'
+            )
+            
+            scheduled_tasks.append(task)
+            
+            # Update tracking
+            resource_info['remaining_study_minutes'] -= time_to_allocate
+            resource_info['last_scheduled_week'] = slot['week_number']
+            workspace_last_scheduled[str(resource_info['resource']['workspace_id'])] = slot['week_number']
+            resource_consecutive_count[resource_id] += 1
+            remaining_time -= time_to_allocate
+            
+            # Reset consecutive count for other resources
+            for rid in resource_consecutive_count:
+                if rid != resource_id:
+                    resource_consecutive_count[rid] = 0
+    
+    # Second pass: Schedule revision tasks
+    revision_slots = [s for s in sorted_slots if s['week_number'] > 1]  # Revision starts from week 2
+    
+    for slot in revision_slots:
+        slot_duration = calculate_slot_duration(slot['start_time'], slot['end_time'])
+        remaining_time = slot_duration
+        slot_date = calculate_slot_date(plan_start_date, slot['week_number'], slot['day_of_week'])
+        
+        # Check if slot already has tasks
+        slot_allocated = sum(t['allocated_minutes'] for t in scheduled_tasks 
+                           if t['week_number'] == slot['week_number'] 
+                           and t['day_of_week'] == slot['day_of_week']
+                           and t['start_time'] == slot['start_time'])
+        
+        remaining_time = slot_duration - slot_allocated
+        
+        while remaining_time > 0:
+            # Find resources that need revision
+            best_resource = find_best_resource_for_slot(
+                resource_time_map,
+                slot,
+                workspace_last_scheduled,
+                resource_consecutive_count,
+                max_consecutive,
+                mix_workspaces,
+                balance_focus,
+                'revision'
+            )
+            
+            if not best_resource:
+                break
+            
+            resource_id = best_resource
+            resource_info = resource_time_map[resource_id]
+            
+            # Allocate time
+            time_to_allocate = min(remaining_time, resource_info['remaining_revision_minutes'])
+            
+            if time_to_allocate <= 0:
+                break
+            
+            # Create scheduled task
+            task = create_scheduled_task_dict(
+                user_id=user_id,
+                slot=slot,
+                slot_date=slot_date,
+                resource=resource_info['resource'],
+                allocated_minutes=time_to_allocate,
+                task_type='revision'
+            )
+            
+            scheduled_tasks.append(task)
+            
+            # Update tracking
+            resource_info['remaining_revision_minutes'] -= time_to_allocate
+            remaining_time -= time_to_allocate
+    
+    # Calculate metadata
+    metadata = calculate_plan_metadata(scheduled_tasks, resources)
+    
+    logger.info(f"Rule-based plan generated with {len(scheduled_tasks)} tasks")
+    return scheduled_tasks, metadata
+
+
+def find_best_resource_for_slot(
+    resource_time_map: Dict[str, Dict[str, Any]],
+    slot: Dict[str, Any],
+    workspace_last_scheduled: Dict[str, int],
+    resource_consecutive_count: Dict[str, int],
+    max_consecutive: int,
+    mix_workspaces: bool,
+    balance_focus: bool,
+    task_type: str
+) -> Optional[str]:
+    """
+    Find the best resource to schedule in a given slot based on rules
+    """
+    candidates = []
+    
+    for resource_id, info in resource_time_map.items():
+        if task_type == 'study':
+            remaining = info['remaining_study_minutes']
+        else:
+            remaining = info['remaining_revision_minutes']
+        
+        if remaining <= 0:
+            continue
+        
+        # Check consecutive scheduling rule
+        if resource_consecutive_count.get(resource_id, 0) >= max_consecutive:
+            continue
+        
+        score = 0
+        
+        # Priority 1: Resources not scheduled recently
+        weeks_since_last = slot['week_number'] - info['last_scheduled_week']
+        score += weeks_since_last * 10
+        
+        # Priority 2: Balance workspace focus
+        if balance_focus and mix_workspaces:
+            workspace_id = str(info['resource']['workspace_id'])
+            workspace_weeks_since = slot['week_number'] - workspace_last_scheduled.get(workspace_id, 0)
+            score += workspace_weeks_since * 5
+        
+        # Priority 3: Resources with more remaining time (to avoid fragmentation)
+        score += remaining / 100
+        
+        candidates.append((resource_id, score))
+    
+    if not candidates:
+        return None
+    
+    # Sort by score and return best
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    return candidates[0][0]
+
+
+def create_scheduled_task_dict(
+    user_id: str,
+    slot: Dict[str, Any],
+    slot_date: date,
+    resource: Dict[str, Any],
+    allocated_minutes: int,
+    task_type: str
+) -> Dict[str, Any]:
+    """
+    Create a scheduled task dictionary
+    """
+    task_title = resource['title']
+    if task_type == 'revision':
+        task_title += " - Revision"
+    
+    return {
+        'user_id': user_id,
+        'study_slot_id': slot.get('slot_id'),  # May be None if slot not yet in DB
+        'resource_id': str(resource['resource_id']),
+        'workspace_id': str(resource['workspace_id']),
+        'thread_id': str(resource['thread_id']),
+        'task_title': task_title,
+        'task_type': task_type,
+        'week_number': slot['week_number'],
+        'day_of_week': slot['day_of_week'],
+        'scheduled_date': slot_date.isoformat(),
+        'start_time': slot['start_time'],
+        'end_time': slot['end_time'],
+        'allocated_minutes': allocated_minutes,
+        'status': 'pending',
+        'completion_percentage': 0
+    }
+
+
+def calculate_slot_duration(start_time: str, end_time: str) -> int:
+    """Calculate duration of a slot in minutes"""
+    start = time.fromisoformat(start_time)
+    end = time.fromisoformat(end_time)
+    
+    start_minutes = start.hour * 60 + start.minute
+    end_minutes = end.hour * 60 + end.minute
+    
+    return end_minutes - start_minutes
+
+
+def calculate_slot_date(plan_start_date: date, week_number: int, day_of_week: int) -> date:
+    """Calculate the actual date for a slot"""
+    # Get the day of week for plan start date (0=Monday in date.weekday())
+    start_day = plan_start_date.weekday()
+    
+    # Convert to our format (0=Sunday)
+    start_day_adjusted = (start_day + 1) % 7
+    
+    # Calculate days offset
+    days_offset = (week_number - 1) * 7 + (day_of_week - start_day_adjusted)
+    
+    return plan_start_date + timedelta(days=days_offset)
+
+
+def calculate_plan_metadata(scheduled_tasks: List[Dict[str, Any]], resources: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate metadata about the generated plan"""
+    total_study_minutes = sum(t['allocated_minutes'] for t in scheduled_tasks if t['task_type'] == 'study')
+    total_revision_minutes = sum(t['allocated_minutes'] for t in scheduled_tasks if t['task_type'] == 'revision')
+    
+    # Calculate coverage
+    resource_coverage = {}
+    for resource in resources:
+        resource_id = str(resource['resource_id'])
+        allocated = sum(t['allocated_minutes'] for t in scheduled_tasks if t['resource_id'] == resource_id)
+        resource_coverage[resource_id] = {
+            'allocated_minutes': allocated,
+            'requested_minutes': resource['remaining_minutes'],
+            'coverage_percentage': min(100, (allocated / resource['remaining_minutes']) * 100) if resource['remaining_minutes'] > 0 else 100
+        }
+    
+    return {
+        'total_study_hours': total_study_minutes / 60,
+        'total_revision_hours': total_revision_minutes / 60,
+        'total_tasks': len(scheduled_tasks),
+        'resource_coverage': resource_coverage
+    }
+
+
+def prepare_scheduling_context(
+    slots: List[Dict[str, Any]],
+    resources: List[Dict[str, Any]],
+    max_weeks: int,
+    revision_ratio: float,
+    scheduling_rules: Dict[str, Any],
+    user_progress: Dict[str, Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Prepare context for AI scheduling"""
+    return {
+        'total_slots': len(slots),
+        'total_available_minutes': sum(calculate_slot_duration(s['start_time'], s['end_time']) for s in slots),
+        'resources_count': len(resources),
+        'total_study_minutes_needed': sum(r['remaining_minutes'] for r in resources),
+        'max_weeks': max_weeks,
+        'revision_ratio': revision_ratio,
+        'scheduling_rules': scheduling_rules,
+        'slots_per_week': len([s for s in slots if s['week_number'] == 1]),
+    }
+
+
+def create_scheduling_prompt(context: Dict[str, Any]) -> str:
+    """Create prompt for OpenAI API"""
+    return f"""
+You are an intelligent study planner. Create an optimal study schedule with these constraints:
+
+- Available time slots: {context['total_slots']} slots across {context['max_weeks']} weeks
+- Total available time: {context['total_available_minutes']} minutes
+- Resources to study: {context['resources_count']} resources
+- Total study time needed: {context['total_study_minutes_needed']} minutes
+- Revision ratio: {context['revision_ratio']}
+- Slots per week: {context['slots_per_week']}
+
+Scheduling rules:
+{json.dumps(context['scheduling_rules'], indent=2)}
+
+Guidelines:
+1. Avoid scheduling the same resource for more than {context['scheduling_rules'].get('max_consecutive_same_resource', 2)} consecutive slots
+2. Mix threads from different workspaces to maintain variety
+3. Balance focus across workspaces
+4. Schedule revision tasks in later weeks (not in week 1)
+5. Consider spaced repetition principles
+6. Optimize for learning effectiveness, not just filling slots
+
+Provide a schedule that maximizes learning while respecting cognitive load principles.
+"""
+
+
+def parse_ai_scheduling_output(
+    ai_output: str,
+    user_id: str,
+    slots: List[Dict[str, Any]],
+    resources: List[Dict[str, Any]],
+    plan_start_date: date
+) -> List[Dict[str, Any]]:
+    """
+    Parse AI output and convert to scheduled tasks
+    Note: This is a simplified version. In production, you'd want more robust parsing.
+    """
+    # For now, fall back to rule-based if AI output can't be parsed
+    # In a full implementation, you'd parse the AI's structured output
+    logger.warning("AI output parsing not fully implemented, using rule-based scheduling")
+    return []
+
+
+# Export main function
+__all__ = ['generate_optimized_study_plan']

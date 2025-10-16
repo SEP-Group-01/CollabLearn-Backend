@@ -1,0 +1,96 @@
+name: Build and Push to ECR
+
+on:
+  push:
+    branches:
+      - main
+      - production
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY_PREFIX: collablearn
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    
+    permissions:
+      id-token: write
+      contents: read
+    
+    strategy:
+      matrix:
+        service:
+          - name: api-gateway
+            dockerfile: apps/api-gateway/Dockerfile
+          - name: auth-service
+            dockerfile: apps/auth-service/Dockerfile
+          - name: workspaces-service
+            dockerfile: apps/workspaces-service/Dockerfile
+          - name: resource-service
+            dockerfile: apps/resource-service/Dockerfile
+          - name: document-editor-service
+            dockerfile: apps/document-editor-service/Dockerfile
+          - name: document-query-service
+            dockerfile: python/document-query-service/Dockerfile
+          - name: study-plan-service
+            dockerfile: python/study_plan_service/Dockerfile
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Create ECR repository if it doesn't exist
+        continue-on-error: true
+        run: |
+          aws ecr create-repository \
+            --repository-name ${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }} \
+            --region ${{ env.AWS_REGION }} \
+            --image-scanning-configuration scanOnPush=true \
+            --encryption-configuration encryptionType=AES256
+      
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f ${{ matrix.service.dockerfile }} -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      
+      - name: Image digest
+        run: echo ${{ steps.build-image.outputs.digest }}
+  
+  notify:
+    name: Notify on completion
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: always()
+    
+    steps:
+      - name: Deployment status
+        run: |
+          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            echo "✅ All images built and pushed successfully!"
+            echo "To deploy on EC2, run:"
+            echo "  docker compose -f docker-compose.prod.yml pull"
+            echo "  docker compose -f docker-compose.prod.yml up -d --force-recreate"
+          else
+            echo "❌ Build failed. Check logs for details."
+            exit 1
+          fi

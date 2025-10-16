@@ -17,7 +17,7 @@ export interface MediaUploadResult {
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
-  private readonly uploadDir = './uploads';
+  private readonly uploadDir = process.env.UPLOAD_DIR || './uploads';
   private readonly maxFileSize = 10 * 1024 * 1024; // 10MB
   private readonly allowedMimeTypes = [
     'image/jpeg',

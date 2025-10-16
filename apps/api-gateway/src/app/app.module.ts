@@ -12,6 +12,7 @@ import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { DocumentEditorController } from './controllers/document-editor-enhanced.controller';
 import { QuizController } from './controllers/quiz.controller';
+import { StudyPlanController } from './controllers/study-plan.controller';
 import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 import { ForumGateway } from './gateways/forum.gateway';
 import { QuizGateway } from './gateways/quiz.gateway';
@@ -43,9 +44,9 @@ import { QuizGateway } from './gateways/quiz.gateway';
         name: 'RESOURCE_SERVICE',
         transport: Transport.TCP,
         // Use host.docker.internal to connect from Docker container to host machine
-        options: { host: 'host.docker.internal', port: 3008 }, // RESOURCE_SERVICE_TCP_PORT
+        //options: { host: 'host.docker.internal', port: 3008 }, // RESOURCE_SERVICE_TCP_PORT
         //options: { host: 'localhost', port: 3008 }, // Use this if running gateway on host
-        //options: { host: 'resource-service', port: 3008 } // Use this if both in Docker
+        options: { host: 'resource-service', port: 3008 } // Use this if both in Docker
       },
     ]),
     ClientsModule.register([
@@ -61,9 +62,9 @@ import { QuizGateway } from './gateways/quiz.gateway';
       {
         name: 'DOCUMENT_EDITOR_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'host.docker.internal', port: 3006 }, // DOCUMENT_EDITOR_SERVICE_PORT
+        //options: { host: 'host.docker.internal', port: 3006 }, // DOCUMENT_EDITOR_SERVICE_PORT
         //options: { host: 'localhost', port: 3006 }, // Use this if running gateway on host
-        //options: { host: 'document-editor-service', port: 3006 } // Use this if both in Docker
+        options: { host: 'document-editor-service', port: 3006 } // Use this if both in Docker
       },
     ]),
     ClientsModule.register([
@@ -107,6 +108,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
     DocumentEditorController,
     QuizController,
     KafkaReplyController,
+    StudyPlanController,
   ],
   providers: [
     KafkaService,

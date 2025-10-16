@@ -109,9 +109,22 @@ class KafkaConsumerService:
             # Pass directly to the controller
             response_data = await self.controller.handle_request(msg.topic, payload)
             
-            # Extract reply topic and partition from NestJS headers
-            reply_topic = f"{msg.topic}.reply"
+            # Extract base topic for reply (remove action suffixes)
+            # For topics like "study-plan-slots.get-slots", reply should go to "study-plan-slots.reply"
+            # For topics like "study-plan-requests.generate", reply should go to "study-plan-requests.reply"
+            # Pattern: "prefix-category.action" -> reply to "prefix-category.reply"
+            base_topic = msg.topic
+            if '.' in msg.topic:
+                # Get everything before the last dot (the action part)
+                # "study-plan-slots.get-slots" -> "study-plan-slots"
+                # "study-plan-requests.generate" -> "study-plan-requests"
+                last_dot_index = msg.topic.rfind('.')
+                base_topic = msg.topic[:last_dot_index]
+            
+            reply_topic = f"{base_topic}.reply"
             reply_partition = None
+            
+            logger.info(f"[KafkaConsumer] 📨 Replying from topic '{msg.topic}' to '{reply_topic}'")
             
             # Check if NestJS specified a reply partition
             if msg.headers:

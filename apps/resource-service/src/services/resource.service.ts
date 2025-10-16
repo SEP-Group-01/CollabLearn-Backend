@@ -509,4 +509,98 @@ export class ResourceService {
       throw new Error(`Failed to create or update review: ${error}`);
     }
   }
+
+  // User Progress Methods
+  async getUserProgress(userId: string, resourceId: string) {
+    try {
+      console.log('🔍 Getting user progress:', { userId, resourceId });
+      const supabase = this.supabaseService.getClient();
+
+      const { data, error } = await supabase
+        .from('user_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('resource_id', resourceId)
+        .single();
+
+      if (error) {
+        // If no progress found, return null instead of throwing error
+        if (error.code === 'PGRST116') {
+          console.log('✅ No progress found for user:', { userId, resourceId });
+          return null;
+        }
+        console.error('❌ Error fetching user progress:', error);
+        throw new Error(`Failed to fetch user progress: ${error.message}`);
+      }
+
+      console.log('✅ User progress fetched successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Error in getUserProgress:', error);
+      throw new Error(`Failed to fetch user progress: ${error}`);
+    }
+  }
+
+  async updateUserProgress(
+    userId: string,
+    resourceId: string,
+    progressData: {
+      completion_status: 'not_started' | 'in_progress' | 'completed' | 'needs_revision';
+      progress_percentage?: number;
+    },
+  ) {
+    try {
+      console.log('🔍 Updating user progress:', { userId, resourceId, progressData });
+      const supabase = this.supabaseService.getClient();
+
+      // Check if progress record exists
+      const existingProgress = await this.getUserProgress(userId, resourceId);
+
+      if (existingProgress) {
+        // Update existing progress
+        console.log('✅ Found existing progress, updating:', existingProgress.id);
+        const { data, error } = await supabase
+          .from('user_progress')
+          .update({
+            ...progressData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId)
+          .eq('resource_id', resourceId)
+          .select('*')
+          .single();
+
+        if (error) {
+          console.error('❌ Error updating user progress:', error);
+          throw new Error(`Failed to update user progress: ${error.message}`);
+        }
+
+        console.log('✅ User progress updated successfully:', data);
+        return data;
+      } else {
+        // Create new progress record
+        console.log('✅ No existing progress, creating new one');
+        const { data, error } = await supabase
+          .from('user_progress')
+          .insert({
+            user_id: userId,
+            resource_id: resourceId,
+            ...progressData,
+          })
+          .select('*')
+          .single();
+
+        if (error) {
+          console.error('❌ Error creating user progress:', error);
+          throw new Error(`Failed to create user progress: ${error.message}`);
+        }
+
+        console.log('✅ User progress created successfully:', data);
+        return data;
+      }
+    } catch (error) {
+      console.error('❌ Error in updateUserProgress:', error);
+      throw new Error(`Failed to update user progress: ${error}`);
+    }
+  }
 }
