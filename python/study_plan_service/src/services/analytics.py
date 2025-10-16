@@ -1,187 +1,237 @@
-from typing import List, Dict, Tuple
-from models.study_plan import StudyResource, CompletionStatus, ResourceType
-from datetime import datetime, timedelta
-import statistics
+"""
+Study Plan Analytics Service
+Provides analytics and feasibility analysis for study plans
+"""
+import logging
+from typing import Dict, Any, List
+from datetime import datetime, date, timedelta
+
+logger = logging.getLogger(__name__)
+
 
 class StudyPlanAnalytics:
-    """
-    Advanced analytics for study plan optimization and tracking
-    """
+    """Analytics service for study plans"""
     
     @staticmethod
-    def calculate_workload_distribution(resources: List[StudyResource], 
-                                      weeks_available: int) -> Dict[int, List[str]]:
+    def analyze_feasibility(
+        total_study_minutes_needed: int,
+        total_available_minutes: int,
+        resources: List[Dict[str, Any]],
+        slots: List[Dict[str, Any]],
+        max_weeks: int
+    ) -> Dict[str, Any]:
         """
-        Distribute workload evenly across available weeks
+        Analyze if a study plan is feasible
+        
+        Returns:
+            Dictionary with feasibility analysis
         """
-        # Group resources by thread to maintain sequence
-        thread_groups = {}
-        for resource in resources:
-            if resource.thread_id not in thread_groups:
-                thread_groups[resource.thread_id] = []
-            thread_groups[resource.thread_id].append(resource)
+        # Calculate basic metrics
+        utilization_ratio = total_study_minutes_needed / total_available_minutes if total_available_minutes > 0 else float('inf')
         
-        # Sort each thread by sequence number
-        for thread_id in thread_groups:
-            thread_groups[thread_id].sort(key=lambda x: x.sequence_number)
+        is_feasible = utilization_ratio <= 1.0
         
-        # Distribute threads across weeks using round-robin
-        week_assignments = {i: [] for i in range(1, weeks_available + 1)}
-        thread_ids = list(thread_groups.keys())
+        # Calculate warnings
+        warnings = []
+        recommendations = []
         
-        for i, thread_id in enumerate(thread_ids):
-            week_num = (i % weeks_available) + 1
-            week_assignments[week_num].append(thread_id)
+        if utilization_ratio > 1.0:
+            deficit = total_study_minutes_needed - total_available_minutes
+            warnings.append(f"Insufficient time: Need {deficit} more minutes ({deficit/60:.1f} hours)")
+            recommendations.append(f"Consider adding {int((deficit / 60) / max_weeks) + 1} more hours per week")
         
-        return week_assignments
-    
-    @staticmethod
-    def estimate_completion_time(resources: List[StudyResource]) -> Dict[str, float]:
-        """
-        Estimate completion times based on resource types and user progress
-        """
-        type_multipliers = {
-            ResourceType.VIDEO: 1.2,  # Extra time for pausing/rewinding
-            ResourceType.QUIZ: 1.5,   # Extra time for thinking
-            ResourceType.DOCUMENT: 1.1,
-            ResourceType.READING: 1.0,
-            ResourceType.LINK: 1.0
-        }
+        elif utilization_ratio > 0.9:
+            warnings.append("Very tight schedule: 90%+ time utilization")
+            recommendations.append("Consider adding buffer time for flexibility")
         
-        estimates = {}
-        for resource in resources:
-            base_time = resource.estimated_time_minutes
-            multiplier = type_multipliers.get(resource.type, 1.0)
-            
-            # Adjust based on completion status
-            if resource.completion_status == CompletionStatus.COMPLETED:
-                adjusted_time = 0
-            elif resource.completion_status == CompletionStatus.NEEDS_REVISION:
-                adjusted_time = base_time * 0.5 * multiplier
-            elif resource.completion_status == CompletionStatus.IN_PROGRESS:
-                remaining = 1.0 - (resource.progress_percentage / 100.0)
-                adjusted_time = base_time * remaining * multiplier
-            else:  # NOT_STARTED
-                adjusted_time = base_time * multiplier
-            
-            estimates[resource.id] = adjusted_time / 60.0  # Convert to hours
+        elif utilization_ratio < 0.5:
+            warnings.append("Underutilized schedule: Less than 50% time usage")
+            recommendations.append("You have extra time for additional resources or deeper study")
         
-        return estimates
-    
-    @staticmethod
-    def calculate_priority_scores(resources: List[StudyResource]) -> Dict[str, float]:
-        """
-        Calculate priority scores for resources based on various factors
-        """
-        priority_scores = {}
+        # Check resource distribution
+        resource_times = [r.get('remaining_minutes', 0) for r in resources]
+        if max(resource_times) > total_available_minutes * 0.5:
+            warnings.append("One resource requires >50% of total time")
+            recommendations.append("Consider breaking down large resources into smaller chunks")
         
-        # Base priorities by type
-        type_priorities = {
-            ResourceType.QUIZ: 3.0,      # Highest priority
-            ResourceType.VIDEO: 2.0,
-            ResourceType.DOCUMENT: 1.5,
-            ResourceType.READING: 1.0,
-            ResourceType.LINK: 1.0
-        }
+        # Check weekly load
+        weekly_slots = {}
+        for slot in slots:
+            week = slot.get('week_number', 1)
+            if week not in weekly_slots:
+                weekly_slots[week] = []
+            weekly_slots[week].append(slot)
         
-        for resource in resources:
-            base_priority = type_priorities.get(resource.type, 1.0)
-            
-            # Boost priority for incomplete items
-            completion_boost = {
-                CompletionStatus.NOT_STARTED: 1.0,
-                CompletionStatus.IN_PROGRESS: 1.2,  # Higher priority to finish
-                CompletionStatus.NEEDS_REVISION: 0.8,
-                CompletionStatus.COMPLETED: 0.0
+        weekly_loads = []
+        for week, week_slots in weekly_slots.items():
+            week_minutes = sum(
+                calculate_slot_duration(s.get('start_time', '00:00'), s.get('end_time', '00:00'))
+                for s in week_slots
+            )
+            weekly_loads.append(week_minutes)
+        
+        if weekly_loads:
+            avg_weekly_load = sum(weekly_loads) / len(weekly_loads)
+            if max(weekly_loads) > avg_weekly_load * 1.5:
+                warnings.append("Uneven weekly distribution detected")
+                recommendations.append("Consider balancing study time more evenly across weeks")
+        
+        return {
+            'is_feasible': is_feasible,
+            'utilization_ratio': round(utilization_ratio, 2),
+            'total_study_hours_needed': round(total_study_minutes_needed / 60, 2),
+            'total_available_hours': round(total_available_minutes / 60, 2),
+            'deficit_hours': round(max(0, total_study_minutes_needed - total_available_minutes) / 60, 2),
+            'surplus_hours': round(max(0, total_available_minutes - total_study_minutes_needed) / 60, 2),
+            'resources_count': len(resources),
+            'slots_count': len(slots),
+            'max_weeks': max_weeks,
+            'average_weekly_hours': round(sum(weekly_loads) / len(weekly_loads) / 60, 2) if weekly_loads else 0,
+            'warnings': warnings,
+            'recommendations': recommendations,
+            'details': {
+                'weekly_loads': [round(w / 60, 2) for w in weekly_loads],
+                'resource_distribution': calculate_resource_distribution(resources)
             }
-            
-            # Sequence boost (earlier items get higher priority)
-            sequence_boost = max(0.1, 1.0 - (resource.sequence_number * 0.1))
-            
-            final_priority = (base_priority * 
-                            completion_boost.get(resource.completion_status, 1.0) * 
-                            sequence_boost)
-            
-            priority_scores[resource.id] = final_priority
-        
-        return priority_scores
-    
-    @staticmethod
-    def generate_feasibility_report(total_required_hours: float, 
-                                  weekly_hours_available: int,
-                                  weeks_until_deadline: int) -> Dict[str, any]:
-        """
-        Generate feasibility analysis for study plan
-        """
-        total_available_hours = weekly_hours_available * weeks_until_deadline
-        coverage_ratio = min(1.0, total_available_hours / total_required_hours)
-        
-        report = {
-            "feasible": coverage_ratio >= 0.95,  # 95% coverage considered feasible
-            "coverage_percentage": coverage_ratio * 100,
-            "total_required_hours": total_required_hours,
-            "total_available_hours": total_available_hours,
-            "weekly_intensity": total_required_hours / weeks_until_deadline,
-            "recommendations": []
         }
-        
-        # Generate recommendations
-        if coverage_ratio < 0.8:
-            report["recommendations"].append(
-                "Consider extending deadline or increasing weekly study hours"
-            )
-        elif coverage_ratio < 0.95:
-            report["recommendations"].append(
-                "Plan is tight - consider adding buffer time for unexpected delays"
-            )
-        
-        if report["weekly_intensity"] > weekly_hours_available * 1.2:
-            report["recommendations"].append(
-                "Weekly workload exceeds available time - prioritize most important content"
-            )
-        
-        if coverage_ratio >= 1.0:
-            extra_hours = total_available_hours - total_required_hours
-            report["recommendations"].append(
-                f"You have {extra_hours:.1f} extra hours - consider adding additional practice or review time"
-            )
-        
-        return report
     
     @staticmethod
-    def suggest_schedule_optimizations(resources: List[StudyResource],
-                                     weekly_hours: int) -> List[str]:
-        """
-        Suggest optimizations for the study schedule
-        """
-        suggestions = []
+    def calculate_completion_statistics(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Calculate statistics about task completion"""
+        if not tasks:
+            return {
+                'total_tasks': 0,
+                'completed_tasks': 0,
+                'completion_rate': 0,
+                'average_rating': 0
+            }
         
-        # Analyze resource distribution
-        type_counts = {}
+        completed = [t for t in tasks if t.get('status') == 'completed']
+        rated = [t for t in tasks if t.get('rating') is not None]
+        
+        return {
+            'total_tasks': len(tasks),
+            'completed_tasks': len(completed),
+            'pending_tasks': len([t for t in tasks if t.get('status') == 'pending']),
+            'in_progress_tasks': len([t for t in tasks if t.get('status') == 'in_progress']),
+            'skipped_tasks': len([t for t in tasks if t.get('status') == 'skipped']),
+            'completion_rate': round(len(completed) / len(tasks) * 100, 2) if tasks else 0,
+            'average_rating': round(sum(t['rating'] for t in rated) / len(rated), 2) if rated else 0,
+            'total_time_allocated': sum(t.get('allocated_minutes', 0) for t in tasks),
+            'total_time_spent': sum(t.get('actual_time_spent', 0) for t in tasks),
+            'time_efficiency': calculate_time_efficiency(tasks)
+        }
+    
+    @staticmethod
+    def generate_progress_report(
+        plan: Dict[str, Any],
+        tasks: List[Dict[str, Any]],
+        resources: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Generate a comprehensive progress report"""
+        completion_stats = StudyPlanAnalytics.calculate_completion_statistics(tasks)
+        
+        # Calculate per-resource progress
+        resource_progress = {}
         for resource in resources:
-            type_counts[resource.type] = type_counts.get(resource.type, 0) + 1
+            resource_id = str(resource.get('resource_id', resource.get('id')))
+            resource_tasks = [t for t in tasks if str(t.get('resource_id')) == resource_id]
+            
+            if resource_tasks:
+                completed = len([t for t in resource_tasks if t.get('status') == 'completed'])
+                resource_progress[resource_id] = {
+                    'resource_title': resource.get('title', 'Unknown'),
+                    'total_tasks': len(resource_tasks),
+                    'completed_tasks': completed,
+                    'completion_rate': round(completed / len(resource_tasks) * 100, 2),
+                    'total_time_allocated': sum(t.get('allocated_minutes', 0) for t in resource_tasks),
+                    'total_time_spent': sum(t.get('actual_time_spent', 0) for t in resource_tasks)
+                }
         
-        # Check for quiz clustering
-        if type_counts.get(ResourceType.QUIZ, 0) > 0:
-            quiz_ratio = type_counts[ResourceType.QUIZ] / len(resources)
-            if quiz_ratio > 0.3:
-                suggestions.append(
-                    "Consider spacing out quizzes throughout the schedule for better retention"
-                )
+        return {
+            'plan_id': plan.get('id'),
+            'plan_status': plan.get('status'),
+            'generated_at': plan.get('generated_at'),
+            'days_active': (datetime.utcnow().date() - datetime.fromisoformat(plan.get('plan_start_date', str(date.today()))).date()).days,
+            'completion_statistics': completion_stats,
+            'resource_progress': resource_progress,
+            'recommendations': generate_recommendations(completion_stats, tasks)
+        }
+
+
+def calculate_slot_duration(start_time: str, end_time: str) -> int:
+    """Calculate duration between start and end times in minutes"""
+    try:
+        from datetime import time as dt_time
+        start = dt_time.fromisoformat(start_time)
+        end = dt_time.fromisoformat(end_time)
         
-        # Check for video heavy sessions
-        if type_counts.get(ResourceType.VIDEO, 0) > 0:
-            video_ratio = type_counts[ResourceType.VIDEO] / len(resources)
-            if video_ratio > 0.5:
-                suggestions.append(
-                    "Mix videos with interactive content to maintain engagement"
-                )
+        start_minutes = start.hour * 60 + start.minute
+        end_minutes = end.hour * 60 + end.minute
         
-        # Check weekly intensity
-        total_hours = sum(r.estimated_time_minutes for r in resources) / 60
-        if total_hours / weekly_hours > 4:  # More than 4 weeks of content
-            suggestions.append(
-                "Consider breaking longer threads into smaller, manageable chunks"
-            )
-        
-        return suggestions
+        return max(0, end_minutes - start_minutes)
+    except:
+        return 0
+
+
+def calculate_resource_distribution(resources: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate how study time is distributed across resources"""
+    if not resources:
+        return {}
+    
+    total_minutes = sum(r.get('remaining_minutes', 0) for r in resources)
+    
+    distribution = {}
+    for resource in resources:
+        resource_id = str(resource.get('resource_id', resource.get('id')))
+        minutes = resource.get('remaining_minutes', 0)
+        distribution[resource_id] = {
+            'title': resource.get('title', 'Unknown'),
+            'minutes': minutes,
+            'percentage': round(minutes / total_minutes * 100, 2) if total_minutes > 0 else 0
+        }
+    
+    return distribution
+
+
+def calculate_time_efficiency(tasks: List[Dict[str, Any]]) -> float:
+    """Calculate time efficiency (actual vs allocated time)"""
+    total_allocated = sum(t.get('allocated_minutes', 0) for t in tasks)
+    total_spent = sum(t.get('actual_time_spent', 0) for t in tasks)
+    
+    if total_allocated == 0:
+        return 0
+    
+    return round(total_spent / total_allocated * 100, 2)
+
+
+def generate_recommendations(completion_stats: Dict[str, Any], tasks: List[Dict[str, Any]]) -> List[str]:
+    """Generate recommendations based on completion statistics"""
+    recommendations = []
+    
+    completion_rate = completion_stats.get('completion_rate', 0)
+    
+    if completion_rate < 50:
+        recommendations.append("Your completion rate is below 50%. Consider adjusting your schedule or breaking tasks into smaller chunks.")
+    
+    elif completion_rate >= 80:
+        recommendations.append("Great job! You're maintaining a high completion rate.")
+    
+    time_efficiency = completion_stats.get('time_efficiency', 0)
+    
+    if time_efficiency > 120:
+        recommendations.append("You're spending more time than allocated. Consider adding buffer time to your schedule.")
+    
+    elif time_efficiency < 80:
+        recommendations.append("You're finishing tasks faster than expected. You might be able to take on more material.")
+    
+    average_rating = completion_stats.get('average_rating', 0)
+    
+    if average_rating > 0 and average_rating < 3:
+        recommendations.append("Your average task rating is low. Consider adjusting difficulty or adding more preparation time.")
+    
+    return recommendations
+
+
+# Export main class
+__all__ = ['StudyPlanAnalytics']

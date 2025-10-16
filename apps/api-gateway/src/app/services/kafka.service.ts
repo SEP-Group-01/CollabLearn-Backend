@@ -32,6 +32,11 @@ export class KafkaService implements OnModuleInit {
       'document-query.search-documents',
       'document-query.get-document-summary',
       'document-query.documents',
+      'study-plan-requests',
+      'study-plan-slots',
+      'study-plan-tasks',
+      'study-plan-analysis',
+      'study-plan-workspaces',
     ];
 
     // Also subscribe to reply topics manually for our message pattern handlers
@@ -40,6 +45,11 @@ export class KafkaService implements OnModuleInit {
       'document-query.search-documents.reply',
       'document-query.get-document-summary.reply',
       'document-query.documents.reply',
+      'study-plan-requests.reply',
+      'study-plan-slots.reply',
+      'study-plan-tasks.reply',
+      'study-plan-analysis.reply',
+      'study-plan-workspaces.reply',
     ];
 
     console.log('[KafkaService] Pre-subscribing to response topics...');

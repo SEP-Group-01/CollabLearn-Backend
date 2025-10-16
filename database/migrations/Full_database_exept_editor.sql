@@ -123,6 +123,7 @@ CREATE TABLE thread_resources (
   resource_type VARCHAR(20) CHECK (resource_type IN ('document', 'video', 'link')),
   title VARCHAR(255) NOT NULL,
   description TEXT,
+  estimated_completion_time integer DEFAULT 0, -- in minutes
   
   -- Firebase Storage fields (the key integration points)
   firebase_path VARCHAR(500),     -- Storage path in Firebase
@@ -145,15 +146,14 @@ CREATE TABLE resource_reviews (
   attachment_url VARCHAR(1024)
 );
 
--- Table to track user progress on resources -- MEHEMA EKAK ONEDA????
+-- Table to track user progress on resources
 CREATE TABLE IF NOT EXISTS user_progress (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    resource_id UUID NOT NULL REFERENCES study_resources(id) ON DELETE CASCADE,
+    resource_id UUID NOT NULL REFERENCES thread_resources(id) ON DELETE CASCADE,
     completion_status VARCHAR(50) NOT NULL DEFAULT 'not_started' 
         CHECK (completion_status IN ('not_started', 'in_progress', 'completed', 'needs_revision')),
     progress_percentage DECIMAL(5,2) DEFAULT 0.00 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
-    actual_time_spent INTEGER DEFAULT 0, -- in minutes
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -167,7 +167,6 @@ CREATE TABLE IF NOT EXISTS study_slots (
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     is_free BOOLEAN DEFAULT true,
-    recurring BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CHECK (end_time > start_time)
 );
@@ -178,30 +177,27 @@ CREATE TABLE IF NOT EXISTS study_plans (
     user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     input_data JSONB NOT NULL, -- Original request data
     result JSONB, -- Generated plan result
-    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'error')),
     total_weeks INTEGER DEFAULT 0,
     coverage_percentage DECIMAL(5,2) DEFAULT 0.00,
-    workspaces_included TEXT[], -- Array of workspace IDs #DN OKKOTMA EKA PLAN EKAK DA HADANNE
-    error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Table to store scheduled tasks from generated plans
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
+
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     plan_id  UUID NOT NULL REFERENCES study_plans(id) ON DELETE CASCADE,
     user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    resource_id  UUID NOT NULL REFERENCES study_resources(id) ON DELETE CASCADE, --MEKATA FK EKK VIDIYT SLOT EKA ENNA ONE NEDA
-    workspace_id VARCHAR(255) NOT NULL,
-    thread_id VARCHAR(255) NOT NULL,
+    resource_id  UUID NOT NULL REFERENCES thread_resources(id) ON DELETE CASCADE, --MEKATA FK EKK VIDIYT SLOT EKA ENNA ONE NEDA
+    thread_id UUID REFERENCES threads(id),
+    sequence_in_resource INT DEFAULT 1,
     week_number INTEGER NOT NULL,
     day_of_week VARCHAR(20) NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     allocated_time_minutes INTEGER NOT NULL,
     completed BOOLEAN DEFAULT false,
-    actual_completion_time INTEGER, -- actual time spent in minutes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (plan_id) REFERENCES study_plans(id) ON DELETE CASCADE,
     FOREIGN KEY (resource_id) REFERENCES study_resources(id) ON DELETE CASCADE

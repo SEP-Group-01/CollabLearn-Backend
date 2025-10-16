@@ -1,17 +1,26 @@
 """
 Study Plan Controller for Study Plan Service
-Handles all study plan related business logic
+Handles all study plan related business logic including slots, plans, and tasks
 """
 
 import json
 import logging
-from typing import Dict, Any
-from datetime import datetime, timedelta
+from typing import Dict, Any, List
+from datetime import datetime, timedelta, date
+from uuid import UUID
 
-from models.study_plan import StudyPlanRequest, CompletionStatus
+from models.study_plan import (
+    StudyPlanRequest, StudyPlanCreate, CompletionStatus,
+    StudyPlanGenerationResponse, ScheduleSlotOutput, ScheduledResourceOutput
+)
+from models.study_slot import StudySlotCreate, DayOfWeekEnum
+from models.scheduled_task import TaskProgressUpdate
 from database import (
     get_free_slots, get_workspace_resources, get_user_workspace_threads,
-    save_study_plan, update_resource_progress, get_user_study_plans
+    save_study_plan, update_resource_progress, get_user_study_plans,
+    create_study_slot, get_user_slots, update_study_slot, delete_study_slot,
+    drop_study_plan, get_active_study_plan, get_plan_tasks, update_task_progress,
+    get_user_progress_for_resources, get_resource_details, get_user_workspaces
 )
 from services.plan_generator import generate_optimized_study_plan
 from services.analytics import StudyPlanAnalytics
@@ -36,29 +45,47 @@ class StudyPlanController:
             dict: Response data to send back to the API Gateway
         """
         
-        # Extract the action from the topic (e.g., 'generate' from 'study-plan-requests.generate')
-        topic_parts = topic.split('.')
-        if len(topic_parts) >= 2:
-            raw_action = topic_parts[1].replace('-', '_')
-            action_mapping = {
-                'requests': 'generate_plan',
-                'generate': 'generate_plan',
-                'progress': 'update_progress',
-                'update_progress': 'update_progress',
-                'feasibility': 'analyze_feasibility',
-                'history': 'get_plan_history'
-            }
-            action = action_mapping.get(raw_action, raw_action)
-        else:
-            # Default action based on topic base name
-            if 'progress' in topic:
-                action = 'update_progress'
-            elif 'requests' in topic:
-                action = 'generate_plan'
-            else:
-                action = 'unknown'
+        # Extract the action from the topic
+        logger.info(f"🔍 [{self.service_name}] Received message on topic: {topic}")
+        logger.info(f"📦 [{self.service_name}] Payload keys: {list(payload.keys())}")
         
-        logger.info(f"[{self.service_name}] Processing action: {action} with payload keys: {list(payload.keys())}")
+        topic_parts = topic.split('.')
+        
+        # Map topic to action - handle different topic patterns
+        action_mapping = {
+            # Direct topic matches (with full topic name)
+            'study-plan-requests.generate': 'generate_plan',
+            'study-plan-requests.drop-plan': 'drop_plan',
+            'study-plan-requests.history': 'get_plan_history',
+            'study-plan-slots.create-slot': 'create_slot',
+            'study-plan-slots.get-slots': 'get_slots',
+            'study-plan-slots.update-slot': 'update_slot',
+            'study-plan-slots.delete-slot': 'delete_slot',
+            'study-plan-tasks.get-tasks': 'get_tasks',
+            'study-plan-tasks.update-task': 'update_task',
+            'study-plan-progress.update-progress': 'update_progress',
+            'study-plan-analysis.feasibility': 'analyze_feasibility',
+            'study-plan-workspaces.get-workspaces': 'get_workspaces',
+            # Base topics (for backwards compatibility)
+            'study-plan-requests': 'generate_plan',
+            'study-plan-progress': 'update_progress',
+            'study-plan-analysis': 'analyze_feasibility',
+            'study-plan-workspaces': 'get_workspaces',
+        }
+        
+        # Try exact match first
+        action = action_mapping.get(topic)
+        
+        # If no exact match, try to parse from topic structure
+        if not action and len(topic_parts) >= 2:
+            # Try matching on last part (the actual action)
+            last_part = topic_parts[-1]
+            action = action_mapping.get(last_part, last_part.replace('-', '_'))
+        
+        if not action:
+            action = 'unknown'
+        
+        logger.info(f"🎯 [{self.service_name}] Mapped topic '{topic}' to action: '{action}'")
         
         # Route to specific methods based on action
         method_name = f"handle_{action}"
@@ -79,340 +106,553 @@ class StudyPlanController:
             return {
                 "success": False,
                 "error": f"Unknown action: {action}",
-                "available_actions": ["generate_plan", "update_progress", "analyze_feasibility", "get_plan_history"],
                 "service": self.service_name
             }
+
+    # ============================================
+    # Slot Management Handlers
+    # ============================================
+
+    async def handle_create_slot(self, payload: dict) -> dict:
+        """Create a new study slot"""
+        try:
+            user_id = payload.get('user_id')
+            day_of_week = payload.get('day_of_week')
+            start_time = payload.get('start_time')
+            end_time = payload.get('end_time')
+            
+            if not all([user_id, day_of_week is not None, start_time, end_time]):
+                return {
+                    "success": False,
+                    "error": "Missing required fields: user_id, day_of_week, start_time, end_time"
+                }
+            
+            slot_data = StudySlotCreate(
+                user_id=user_id,
+                day_of_week=day_of_week,
+                start_time=start_time,
+                end_time=end_time
+            )
+            
+            slot = await create_study_slot(slot_data)
+            
+            logger.info(f"Created slot {slot['id']} for user {user_id}")
+            
+            return {
+                "success": True,
+                "slot": slot,
+                "message": "Study slot created successfully"
+            }
+            
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+        except Exception as e:
+            logger.error(f"Error creating slot: {e}")
+            raise
+
+    async def handle_get_slots(self, payload: dict) -> dict:
+        """Get all slots for a user"""
+        try:
+            user_id = payload.get('user_id')
+            is_free = payload.get('is_free')  # Optional filter
+            
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "Missing required field: user_id"
+                }
+            
+            slots = await get_user_slots(user_id, is_free)
+            
+            return {
+                "success": True,
+                "slots": slots,
+                "count": len(slots)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching slots: {e}")
+            raise
+
+    async def handle_update_slot(self, payload: dict) -> dict:
+        """Update a study slot"""
+        try:
+            slot_id = payload.get('slot_id')
+            update_data = payload.get('update_data', {})
+            
+            if not slot_id:
+                return {
+                    "success": False,
+                    "error": "Missing required field: slot_id"
+                }
+            
+            slot = await update_study_slot(slot_id, update_data)
+            
+            return {
+                "success": True,
+                "slot": slot,
+                "message": "Study slot updated successfully"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error updating slot: {e}")
+            raise
+
+    async def handle_delete_slot(self, payload: dict) -> dict:
+        """Delete a study slot"""
+        try:
+            slot_id = payload.get('slot_id')
+            user_id = payload.get('user_id')
+            
+            if not all([slot_id, user_id]):
+                return {
+                    "success": False,
+                    "error": "Missing required fields: slot_id, user_id"
+                }
+            
+            await delete_study_slot(slot_id, user_id)
+            
+            return {
+                "success": True,
+                "message": "Study slot deleted successfully"
+            }
+            
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+        except Exception as e:
+            logger.error(f"Error deleting slot: {e}")
+            raise
+
+    # ============================================
+    # Study Plan Generation Handler
+    # ============================================
 
     async def handle_generate_plan(self, payload: dict) -> dict:
         """
         Handle study plan generation requests
-        
-        Args:
-            payload: Study plan request data
-            
-        Returns:
-            dict: Generated study plan or error response
         """
         try:
-            logger.info(f"[{self.service_name}] Generating study plan for payload: {payload}")
+            user_id = payload.get('user_id')
+            max_weeks = payload.get('max_weeks', 1)
+            revision_ratio = payload.get('revision_ratio', 0.25)
+            scheduling_rules = payload.get('scheduling_rules', {
+                'max_consecutive_same_resource': 2,
+                'mix_threads_across_workspaces': True,
+                'balance_workspace_focus': True
+            })
+            slots = payload.get('slots', [])
+            resources = payload.get('resources', [])
             
-            # Check if this is a legacy request format
-            is_legacy = "focus_areas" in payload and "workspace_ids" not in payload
-            
-            if is_legacy:
-                # Handle legacy format for backward compatibility
-                logger.info(f"[{self.service_name}] Processing legacy format request")
-                return await self._handle_legacy_request(payload)
-            
-            # Validate required fields
-            required_fields = ["user_id", "workspace_ids", "selected_threads"]
-            missing_fields = [field for field in required_fields if field not in payload]
-            if missing_fields:
+            if not user_id:
                 return {
                     "success": False,
-                    "error": f"Missing required fields: {missing_fields}",
-                    "service": self.service_name
+                    "error": "Missing required field: user_id"
                 }
             
-            # Create StudyPlanRequest object
-            request = StudyPlanRequest(**payload)
-            
-            # Calculate weekly hours from time slots if not provided
-            if not hasattr(request, 'weekly_hours_available') or not request.weekly_hours_available:
-                time_slots = get_free_slots(request.user_id)
-                total_weekly_minutes = sum(slot.duration_minutes for slot in time_slots)
-                request.weekly_hours_available = int(total_weekly_minutes / 60)
-                logger.info(f"[{self.service_name}] Calculated weekly hours from time slots: {request.weekly_hours_available}")
-            
-            # Get user's available time slots
-            time_slots = get_free_slots(request.user_id)
-            if not time_slots:
+            if not slots:
                 return {
                     "success": False,
-                    "error": "No available time slots found. Please add your free time slots first.",
-                    "service": self.service_name
+                    "error": "No time slots provided"
                 }
             
-            # Validate workspace access and get available threads
-            validated_workspace_ids = []
-            validated_selected_threads = {}
-            
-            for workspace_id in request.workspace_ids:
-                try:
-                    available_threads = get_user_workspace_threads(request.user_id, workspace_id)
-                    requested_threads = request.selected_threads.get(workspace_id, [])
-                    
-                    # Filter to only threads user has access to
-                    valid_threads = [t for t in requested_threads if t in available_threads]
-                    
-                    if valid_threads:
-                        validated_workspace_ids.append(workspace_id)
-                        validated_selected_threads[workspace_id] = valid_threads
-                    else:
-                        logger.warning(f"User {request.user_id} has no access to threads in workspace {workspace_id}")
-                except Exception as e:
-                    logger.warning(f"Error checking workspace {workspace_id}: {str(e)}")
-            
-            if not validated_workspace_ids:
+            if not resources:
                 return {
                     "success": False,
-                    "error": "No accessible workspaces or threads found",
-                    "service": self.service_name
+                    "error": "No resources provided"
                 }
             
-            # Update request with validated data
-            request.workspace_ids = validated_workspace_ids
-            request.selected_threads = validated_selected_threads
+            logger.info(f"Generating study plan for user {user_id} with {len(slots)} slots and {len(resources)} resources")
             
-            # Get workspace resources with user progress
-            workspace_resources = get_workspace_resources(request.user_id, validated_workspace_ids)
+            # Get user progress for all resources
+            resource_ids = [str(r['resource_id']) for r in resources]
+            user_progress = await get_user_progress_for_resources(user_id, resource_ids)
             
-            # Generate optimized study plan
-            result, error = generate_optimized_study_plan(request, time_slots, workspace_resources)
+            # Adjust remaining minutes based on progress
+            for resource in resources:
+                resource_id = str(resource['resource_id'])
+                if resource_id in user_progress:
+                    progress_pct = user_progress[resource_id].get('completion_percentage', 0)
+                    original_minutes = resource['remaining_minutes']
+                    resource['remaining_minutes'] = int(original_minutes * (100 - progress_pct) / 100)
             
-            if error:
-                return {
-                    "success": False,
-                    "error": error,
-                    "service": self.service_name
-                }
+            # Set plan dates
+            plan_start_date = date.today()
+            plan_end_date = plan_start_date + timedelta(weeks=max_weeks)
             
-            # Save study plan
-            plan_id = save_study_plan(
-                request.user_id, payload,
-                result.dict() if result else None,
-                "done", result.total_weeks if result else 0, None
+            # Generate the optimized study plan
+            scheduled_tasks, metadata = generate_optimized_study_plan(
+                user_id=user_id,
+                slots=slots,
+                resources=resources,
+                max_weeks=max_weeks,
+                revision_ratio=revision_ratio,
+                scheduling_rules=scheduling_rules,
+                user_progress=user_progress,
+                plan_start_date=plan_start_date
             )
             
-            # Prepare response
-            response = {
-                "success": True,
-                "plan_id": plan_id,
-                "study_plan": result.dict(),
-                "message": "Study plan generated successfully",
-                "service": self.service_name
+            if not scheduled_tasks:
+                return {
+                    "success": False,
+                    "error": "Failed to generate study plan. Please check your constraints.",
+                    "metadata": metadata
+                }
+            
+            # Create study plan in database
+            plan_data = {
+                'user_id': user_id,
+                'max_weeks': max_weeks,
+                'revision_ratio': revision_ratio,
+                'scheduling_rules': scheduling_rules,
+                'plan_start_date': plan_start_date,
+                'plan_end_date': plan_end_date,
+                'status': 'active'
             }
             
-            logger.info(f"[{self.service_name}] Study plan generated successfully for user {request.user_id}")
-            return response
+            # Save plan and tasks
+            plan, tasks = await save_study_plan(plan_data, scheduled_tasks)
+            
+            # Format response
+            schedule = await format_schedule_output(tasks, resources)
+            
+            response = StudyPlanGenerationResponse(
+                plan_id=plan['id'],
+                user_id=user_id,
+                max_weeks=max_weeks,
+                revision_ratio=revision_ratio,
+                plan_start_date=plan_start_date.isoformat(),
+                plan_end_date=plan_end_date.isoformat(),
+                generated_at=plan['generated_at'],
+                total_study_hours=metadata.get('total_study_hours', 0),
+                total_revision_hours=metadata.get('total_revision_hours', 0),
+                schedule=schedule,
+                warnings=[],
+                success=True
+            )
+            
+            logger.info(f"Successfully generated study plan {plan['id']} with {len(tasks)} tasks")
+            
+            return response.dict()
             
         except Exception as e:
-            logger.error(f"[{self.service_name}] Error generating study plan: {str(e)}", exc_info=True)
+            logger.error(f"Error generating study plan: {e}", exc_info=True)
             return {
                 "success": False,
-                "error": str(e),
-                "service": self.service_name
+                "error": str(e)
             }
+
+    # ============================================
+    # Task and Progress Handlers
+    # ============================================
 
     async def handle_update_progress(self, payload: dict) -> dict:
         """
         Handle progress update requests
-        
-        Args:
-            payload: Progress update data
-            
-        Returns:
-            dict: Update result
         """
         try:
-            logger.info(f"[{self.service_name}] Updating progress for payload: {payload}")
+            task_id = payload.get('task_id')
+            user_id = payload.get('user_id')
             
-            # Validate required fields
-            required_fields = ["user_id", "resource_id", "completion_status", "progress_percentage"]
-            missing_fields = [field for field in required_fields if field not in payload]
-            if missing_fields:
+            if not all([task_id, user_id]):
                 return {
                     "success": False,
-                    "error": f"Missing required fields: {missing_fields}",
-                    "service": self.service_name
+                    "error": "Missing required fields: task_id, user_id"
                 }
             
-            # Update progress
-            update_resource_progress(
-                user_id=payload["user_id"],
-                resource_id=payload["resource_id"],
-                completion_status=payload["completion_status"],
-                progress_percentage=float(payload["progress_percentage"]),
-                actual_time_spent=payload.get("actual_time_spent", 0)
-            )
-            
-            response = {
-                "success": True,
-                "user_id": payload["user_id"],
-                "resource_id": payload["resource_id"],
-                "message": "Progress updated successfully",
-                "service": self.service_name
+            # Extract progress data
+            progress_data = {
+                'status': payload.get('status'),
+                'completion_percentage': payload.get('completion_percentage'),
+                'actual_time_spent': payload.get('actual_time_spent'),
+                'rating': payload.get('rating'),
+                'notes': payload.get('notes')
             }
             
-            logger.info(f"[{self.service_name}] Progress updated successfully for user {payload['user_id']}")
-            return response
+            # Remove None values
+            progress_data = {k: v for k, v in progress_data.items() if v is not None}
+            
+            # Update completed_at if status is completed
+            if progress_data.get('status') == 'completed':
+                progress_data['completed_at'] = datetime.utcnow().isoformat()
+            
+            # Update task
+            task = await update_task_progress(task_id, progress_data)
+            
+            # Update resource progress if task is completed
+            if progress_data.get('status') == 'completed' and progress_data.get('actual_time_spent'):
+                await update_resource_progress(
+                    user_id=user_id,
+                    resource_id=task['resource_id'],
+                    time_spent=progress_data['actual_time_spent'],
+                    completion_percentage=progress_data.get('completion_percentage', 100)
+                )
+            
+            logger.info(f"Updated progress for task {task_id}")
+            
+            return {
+                "success": True,
+                "task": task,
+                "message": "Task progress updated successfully"
+            }
             
         except Exception as e:
-            logger.error(f"[{self.service_name}] Error updating progress: {str(e)}", exc_info=True)
+            logger.error(f"Error updating progress: {e}")
+            raise
+
+    async def handle_update_task(self, payload: dict) -> dict:
+        """Handle task update (alias for update_progress)"""
+        return await self.handle_update_progress(payload)
+
+    async def handle_get_tasks(self, payload: dict) -> dict:
+        """Get tasks for a user or plan"""
+        try:
+            plan_id = payload.get('plan_id')
+            user_id = payload.get('user_id')
+            
+            if plan_id:
+                tasks = await get_plan_tasks(plan_id)
+            elif user_id:
+                # Get tasks for active plan
+                active_plan = await get_active_study_plan(user_id)
+                if not active_plan:
+                    return {
+                        "success": True,
+                        "tasks": [],
+                        "message": "No active study plan found"
+                    }
+                tasks = await get_plan_tasks(active_plan['id'])
+            else:
+                return {
+                    "success": False,
+                    "error": "Either plan_id or user_id required"
+                }
+            
             return {
-                "success": False,
-                "error": str(e),
-                "service": self.service_name
+                "success": True,
+                "tasks": tasks,
+                "count": len(tasks)
             }
+            
+        except Exception as e:
+            logger.error(f"Error fetching tasks: {e}")
+            raise
+
+    # ============================================
+    # Plan Management Handlers
+    # ============================================
+
+    async def handle_drop_plan(self, payload: dict) -> dict:
+        """Drop a study plan and free all slots"""
+        try:
+            plan_id = payload.get('plan_id')
+            user_id = payload.get('user_id')
+            
+            if not all([plan_id, user_id]):
+                return {
+                    "success": False,
+                    "error": "Missing required fields: plan_id, user_id"
+                }
+            
+            await drop_study_plan(plan_id, user_id)
+            
+            return {
+                "success": True,
+                "message": "Study plan dropped successfully"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error dropping plan: {e}")
+            raise
+
+    async def handle_get_plan_history(self, payload: dict) -> dict:
+        """Get study plan history for a user"""
+        try:
+            user_id = payload.get('user_id')
+            status = payload.get('status')  # Optional filter
+            
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "Missing required field: user_id"
+                }
+            
+            plans = await get_user_study_plans(user_id, status)
+            
+            return {
+                "success": True,
+                "plans": plans,
+                "count": len(plans)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching plan history: {e}")
+            raise
+
+    # ============================================
+    # Analytics and Feasibility Handlers
+    # ============================================
 
     async def handle_analyze_feasibility(self, payload: dict) -> dict:
         """
         Handle feasibility analysis requests
-        
-        Args:
-            payload: Study plan request data for analysis
-            
-        Returns:
-            dict: Feasibility analysis result
         """
         try:
-            logger.info(f"[{self.service_name}] Analyzing feasibility for payload: {payload}")
+            max_weeks = payload.get('max_weeks', 1)
+            slots = payload.get('slots', [])
+            resources = payload.get('resources', [])
             
-            # Create StudyPlanRequest object
-            request = StudyPlanRequest(**payload)
+            if not slots or not resources:
+                return {
+                    "success": False,
+                    "error": "Missing slots or resources for analysis"
+                }
             
-            # Get workspace resources
-            workspace_resources = get_workspace_resources(request.user_id, request.workspace_ids)
-            
-            # Calculate total required hours
-            all_resources = []
-            for workspace_id, resources in workspace_resources.items():
-                if workspace_id in request.workspace_ids:
-                    selected_threads = request.selected_threads.get(workspace_id, [])
-                    for resource in resources:
-                        if resource.thread_id in selected_threads:
-                            all_resources.append(resource)
-            
-            estimates = StudyPlanAnalytics.estimate_completion_time(all_resources)
-            total_required_hours = sum(estimates.values())
-            
-            # Calculate weeks until deadline
-            if request.deadline:
-                weeks_until_deadline = max(1, (request.deadline - datetime.now().date()).days // 7)
-            else:
-                weeks_until_deadline = 4  # Default to 4 weeks
-            
-            # Generate feasibility report
-            report = StudyPlanAnalytics.generate_feasibility_report(
-                total_required_hours,
-                request.weekly_hours_available,
-                weeks_until_deadline
+            # Calculate totals
+            total_available_minutes = sum(
+                calculate_slot_duration(s.get('start_time', '00:00'), s.get('end_time', '00:00'))
+                for s in slots
             )
             
-            # Add optimization suggestions
-            suggestions = StudyPlanAnalytics.suggest_schedule_optimizations(
-                all_resources, request.weekly_hours_available
-            )
-            report["optimization_suggestions"] = suggestions
+            total_study_minutes_needed = sum(r.get('remaining_minutes', 0) for r in resources)
             
-            response = {
+            # Perform feasibility analysis
+            analysis = StudyPlanAnalytics.analyze_feasibility(
+                total_study_minutes_needed=total_study_minutes_needed,
+                total_available_minutes=total_available_minutes,
+                resources=resources,
+                slots=slots,
+                max_weeks=max_weeks
+            )
+            
+            return {
                 "success": True,
-                "feasibility_report": report,
-                "total_resources": len(all_resources),
-                "service": self.service_name
+                "analysis": analysis
             }
-            
-            logger.info(f"[{self.service_name}] Feasibility analysis completed for user {request.user_id}")
-            return response
             
         except Exception as e:
-            logger.error(f"[{self.service_name}] Error analyzing feasibility: {str(e)}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "service": self.service_name
-            }
+            logger.error(f"Error analyzing feasibility: {e}")
+            raise
 
-    async def handle_get_plan_history(self, payload: dict) -> dict:
-        """
-        Handle study plan history requests
-        
-        Args:
-            payload: Request data containing user_id
-            
-        Returns:
-            dict: User's study plan history
-        """
+    # ============================================
+    # Workspace/Resource Handlers
+    # ============================================
+
+    async def handle_get_workspaces(self, payload: dict) -> dict:
+        """Get workspaces and threads for a user"""
         try:
-            logger.info(f"[{self.service_name}] Getting plan history for payload: {payload}")
+            logger.info(f"🏢 [StudyPlanController] Handling get_workspaces request")
+            logger.info(f"📦 [StudyPlanController] Payload: {payload}")
             
-            user_id = payload.get("user_id")
+            user_id = payload.get('user_id')
+            
             if not user_id:
+                logger.error(f"❌ [StudyPlanController] Missing user_id in payload")
                 return {
                     "success": False,
-                    "error": "Missing user_id",
-                    "service": self.service_name
+                    "error": "Missing required field: user_id"
                 }
             
-            plans = get_user_study_plans(user_id)
+            logger.info(f"👤 [StudyPlanController] Fetching workspaces for user: {user_id}")
             
-            response = {
+            workspaces = await get_user_workspaces(user_id)
+            logger.info(f"✅ [StudyPlanController] Found {len(workspaces)} workspaces for user {user_id}")
+            
+            # For each workspace, get threads user is subscribed to
+            workspace_data = []
+            for workspace in workspaces:
+                logger.info(f"🔍 [StudyPlanController] Processing workspace: {workspace.get('id')} - {workspace.get('title')}")
+                
+                threads = await get_user_workspace_threads(user_id, workspace['id'])
+                logger.info(f"📋 [StudyPlanController] Found {len(threads)} threads in workspace {workspace['id']}")
+                
+                # For each thread, get resources
+                for thread in threads:
+                    logger.info(f"🔗 [StudyPlanController] Fetching resources for thread: {thread.get('id')} - {thread.get('name')}")
+                    resources = await get_workspace_resources(workspace['id'], thread['id'])
+                    logger.info(f"📄 [StudyPlanController] Found {len(resources)} resources in thread {thread['id']}")
+                    thread['resources'] = resources
+                
+                workspace['threads'] = threads
+                workspace_data.append(workspace)
+            
+            logger.info(f"✅ [StudyPlanController] Successfully prepared {len(workspace_data)} workspaces with threads and resources")
+            
+            return {
                 "success": True,
-                "user_id": user_id,
-                "study_plans": plans,
-                "total_plans": len(plans),
-                "service": self.service_name
+                "workspaces": workspace_data
             }
             
-            logger.info(f"[{self.service_name}] Retrieved {len(plans)} plans for user {user_id}")
-            return response
-            
         except Exception as e:
-            logger.error(f"[{self.service_name}] Error getting plan history: {str(e)}", exc_info=True)
+            logger.error(f"❌ [StudyPlanController] Error fetching workspaces: {e}", exc_info=True)
             return {
                 "success": False,
-                "error": str(e),
-                "service": self.service_name
+                "error": str(e)
             }
 
-    async def _handle_legacy_request(self, payload: dict) -> dict:
-        """
-        Handle legacy format requests for backward compatibility
+
+# ============================================
+# Helper Functions
+# ============================================
+
+async def format_schedule_output(tasks: List[Dict[str, Any]], resources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Format scheduled tasks into the output schedule structure"""
+    # Group tasks by slot
+    slot_groups = {}
+    
+    for task in tasks:
+        key = (
+            task['week_number'],
+            task['day_of_week'],
+            task['start_time'],
+            task['end_time'],
+            task['scheduled_date']
+        )
         
-        Args:
-            payload: Legacy format request data
-            
-        Returns:
-            dict: Study plan result
-        """
-        try:
-            from services.plan_generator import generate_study_plan
-            from database import get_free_slots_legacy
-            
-            # Create legacy format request
-            request = StudyPlanRequest(**payload)
-            free_slots = get_free_slots_legacy(request.user_id)
-            result, error = generate_study_plan(request, free_slots)
-            
-            if error:
-                return {
-                    "success": False,
-                    "error": error,
-                    "service": self.service_name
-                }
-            
-            # Save legacy plan
-            plan_id = save_study_plan(
-                request.user_id, payload,
-                result.dict() if result else None,
-                "done", getattr(result, 'weeks_required', 0), None
-            )
-            
-            response = {
-                "success": True,
-                "plan_id": plan_id,
-                "study_plan": result.dict(),
-                "message": "Legacy study plan generated successfully",
-                "service": self.service_name
+        if key not in slot_groups:
+            slot_groups[key] = {
+                'study_slot_id': task.get('study_slot_id'),
+                'week_number': task['week_number'],
+                'day_of_week': task['day_of_week'],
+                'day_name': DayOfWeekEnum.get_name(task['day_of_week']),
+                'scheduled_date': task['scheduled_date'],
+                'start_time': task['start_time'],
+                'end_time': task['end_time'],
+                'assigned_resources': []
             }
-            
-            logger.info(f"[{self.service_name}] Legacy study plan generated for user {request.user_id}")
-            return response
-            
-        except Exception as e:
-            logger.error(f"[{self.service_name}] Error in legacy request handler: {str(e)}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "service": self.service_name
-            }
+        
+        # Add resource to slot
+        slot_groups[key]['assigned_resources'].append({
+            'resource_id': task['resource_id'],
+            'title': task['task_title'],
+            'workspace_id': task['workspace_id'],
+            'thread_id': task['thread_id'],
+            'allocated_minutes': task['allocated_minutes'],
+            'task_type': task['task_type'],
+            'task_id': task.get('id')
+        })
+    
+    # Convert to list and sort
+    schedule = sorted(slot_groups.values(), key=lambda x: (x['week_number'], x['day_of_week'], x['start_time']))
+    
+    return schedule
+
+
+def calculate_slot_duration(start_time: str, end_time: str) -> int:
+    """Calculate duration of a slot in minutes"""
+    try:
+        from datetime import time
+        start = time.fromisoformat(start_time)
+        end = time.fromisoformat(end_time)
+        
+        start_minutes = start.hour * 60 + start.minute
+        end_minutes = end.hour * 60 + end.minute
+        
+        return max(0, end_minutes - start_minutes)
+    except:
+        return 0

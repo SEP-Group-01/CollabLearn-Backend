@@ -32,4 +32,34 @@ export class KafkaReplyController {
     console.log('[KafkaReplyController] Received documents reply:', message);
     this.kafkaService.handleReply('document-query.documents.reply', message, context);
   }
+
+  @MessagePattern('study-plan-requests.reply')
+  handleStudyPlanRequestsReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received study plan requests reply:', message);
+    this.kafkaService.handleReply('study-plan-requests.reply', message, context);
+  }
+
+  @MessagePattern('study-plan-slots.reply')
+  handleStudyPlanSlotsReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received study plan slots reply:', message);
+    this.kafkaService.handleReply('study-plan-slots.reply', message, context);
+  }
+
+  @MessagePattern('study-plan-tasks.reply')
+  handleStudyPlanTasksReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received study plan tasks reply:', message);
+    this.kafkaService.handleReply('study-plan-tasks.reply', message, context);
+  }
+
+  @MessagePattern('study-plan-analysis.reply')
+  handleStudyPlanAnalysisReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received study plan analysis reply:', message);
+    this.kafkaService.handleReply('study-plan-analysis.reply', message, context);
+  }
+
+  @MessagePattern('study-plan-workspaces.reply')
+  handleStudyPlanWorkspacesReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received study plan workspaces reply:', message);
+    this.kafkaService.handleReply('study-plan-workspaces.reply', message, context);
+  }
 }
