@@ -51,11 +51,18 @@ export class CreateQuizDto {
   @Type(() => QuizQuestionDto)
   questions: QuizQuestionDto[];
 
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  tags: string[];
+  tags?: string[];
 
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  resourceTags: string[];
+  resourceTags?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedResources?: string[];
 }

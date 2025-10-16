@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Complete Workspace-Thread-Quiz Testing</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      .test-section {
+        margin: 20px 0;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .step-section {
+        margin: 15px 0;
+        padding: 15px;
+        border-left: 4px solid #007bff;
+        background: #f8f9fa;
+      }
+      .result {
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-size: 14px;
+      }
+      .success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+      .warning {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffc107;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .btn-primary {
+        background: #007bff;
+        color: white;
+      }
+      .btn-success {
+        background: #28a745;
+        color: white;
+      }
+      .btn-warning {
+        background: #ffc107;
+        color: #212529;
+      }
+      .btn-danger {
+        background: #dc3545;
+        color: white;
+      }
+      .btn-info {
+        background: #17a2b8;
+        color: white;
+      }
+      .btn-secondary {
+        background: #6c757d;
+        color: white;
+      }
+      pre {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 3px;
+        overflow-x: auto;
+        font-size: 12px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      input,
+      textarea,
+      select {
+        width: 100%;
+        max-width: 300px;
+        padding: 8px;
+        margin: 5px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .form-row {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .form-group {
+        margin: 10px 0;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+      }
+      h1 {
+        text-align: center;
+        color: #333;
+      }
+      h3 {
+        color: #495057;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+      }
+      .flow-step {
+        display: inline-block;
+        padding: 8px 16px;
+        margin: 5px;
+        background: #e9ecef;
+        border-radius: 20px;
+        font-size: 14px;
+      }
+      .flow-step.active {
+        background: #007bff;
+        color: white;
+      }
+      .flow-step.completed {
+        background: #28a745;
+        color: white;
+      }
+      .data-display {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+        font-family: monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎯 Complete Workspace → Thread → Quiz Testing Flow</h1>
+
+      <!-- Configuration Section -->
+      <div class="test-section">
+        <h3>⚙️ Setup Configuration</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>API Base URL:</label>
+            <input type="text" id="apiUrl" value="http://localhost:3000/api" />
+          </div>
+          <div class="form-group">
+            <label>JWT Token:</label>
+            <textarea
+              id="jwtToken"
+              placeholder="Paste your JWT token here"
+              style="height: 60px"
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>User ID:</label>
+            <input
+              type="text"
+              id="userId"
+              value=""
+              placeholder="Will be extracted from token"
+            />
+          </div>
+          <div class="form-group">
+            <label>User Email:</label>
+            <input
+              type="text"
+              id="userEmail"
+              value=""
+              placeholder="Will be extracted from token"
+            />
+          </div>
+        </div>
+
+        <button class="btn-info" onclick="extractTokenInfo()">
+          Extract Token Info
+        </button>
+        <div id="tokenInfo"></div>
+      </div>
+
+      <!-- Testing Flow -->
+      <div class="test-section">
+        <h3>🔄 Testing Flow Progress</h3>
+        <div id="flowProgress">
+          <span class="flow-step" id="step1">1. Token Validation</span>
+          <span class="flow-step" id="step2">2. Create Workspace</span>
+          <span class="flow-step" id="step3">3. Create Thread</span>
+          <span class="flow-step" id="step4">4. Set Admin/Moderator</span>
+          <span class="flow-step" id="step5">5. Test Quiz Creation</span>
+          <span class="flow-step" id="step6">6. Test Quiz Management</span>
+        </div>
+      </div>
+
+      <!-- Step 1: Authentication -->
+      <div class="test-section">
+        <h3>🔐 Step 1: Authentication & Token Validation</h3>
+        <div class="step-section">
+          <p>
+            <strong>Purpose:</strong> Validate JWT token and extract user
+            information
+          </p>
+          <button class="btn-primary" onclick="testAuthentication()">
+            Test Authentication
+          </button>
+          <div id="authResult"></div>
+        </div>
+      </div>
+
+      <!-- Step 2: Workspace Management -->
+      <div class="test-section">
+        <h3>🏢 Step 2: Workspace Management</h3>
+        <div class="step-section">
+          <p>
+            <strong>Purpose:</strong> Create workspace and verify admin
+            permissions
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Workspace Name:</label>
+              <input
+                type="text"
+                id="workspaceName"
+                value="Test Workspace"
+                placeholder="Enter workspace name"
+              />
+            </div>
+            <div class="form-group">
+              <label>Workspace ID (if existing):</label>
+              <input
+                type="text"
+                id="workspaceId"
+                value=""
+                placeholder="Will be set after creation"
+              />
+            </div>
+          </div>
+          <button class="btn-success" onclick="createWorkspace()">
+            Create Workspace
+          </button>
+          <button class="btn-info" onclick="listWorkspaces()">
+            List My Workspaces
+          </button>
+          <div id="workspaceResult"></div>
+        </div>
+      </div>
+
+      <!-- Step 3: Thread Management -->
+      <div class="test-section">
+        <h3>💬 Step 3: Thread Management</h3>
+        <div class="step-section">
+          <p>
+            <strong>Purpose:</strong> Create thread within workspace and set
+            moderator permissions
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Thread Title:</label>
+              <input
+                type="text"
+                id="threadTitle"
+                value="Quiz Discussion Thread"
+                placeholder="Enter thread title"
+              />
+            </div>
+            <div class="form-group">
+              <label>Thread ID (if existing):</label>
+              <input
+                type="text"
+                id="threadId"
+                value=""
+                placeholder="Will be set after creation"
+              />
+            </div>
+          </div>
+          <button class="btn-success" onclick="createThread()">
+            Create Thread
+          </button>
+          <button class="btn-warning" onclick="setThreadModerator()">
+            Set Thread Moderator
+          </button>
+          <button class="btn-info" onclick="listThreads()">List Threads</button>
+          <div id="threadResult"></div>
+        </div>
+      </div>
+
+      <!-- Step 4: Permission Testing -->
+      <div class="test-section">
+        <h3>🔒 Step 4: Permission Testing</h3>
+        <div class="step-section">
+          <p>
+            <strong>Purpose:</strong> Verify admin/moderator permissions for
+            quiz creation
+          </p>
+          <button class="btn-warning" onclick="testAdminPermission()">
+            Test Admin Permission
+          </button>
+          <button class="btn-warning" onclick="testModeratorPermission()">
+            Test Moderator Permission
+          </button>
+          <button class="btn-danger" onclick="testUnauthorizedUser()">
+            Test Unauthorized User
+          </button>
+          <div id="permissionResult"></div>
+        </div>
+      </div>
+
+      <!-- Step 5: Quiz Creation & Management -->
+      <div class="test-section">
+        <h3>📝 Step 5: Quiz Creation & Management</h3>
+        <div class="step-section">
+          <p>
+            <strong>Purpose:</strong> Test complete quiz lifecycle within the
+            thread
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Quiz Title:</label>
+              <input
+                type="text"
+                id="quizTitle"
+                value="Workspace Admin Quiz"
+                placeholder="Enter quiz title"
+              />
+            </div>
+            <div class="form-group">
+              <label>Quiz ID (after creation):</label>
+              <input
+                type="text"
+                id="quizId"
+                value=""
+                placeholder="Will be set after creation"
+              />
+            </div>
+          </div>
+          <button class="btn-primary" onclick="createQuizInThread()">
+            Create Quiz in Thread
+          </button>
+          <button class="btn-success" onclick="listQuizzesInThread()">
+            List Quizzes in Thread
+          </button>
+          <button class="btn-info" onclick="getQuizDetails()">
+            Get Quiz Details
+          </button>
+          <div id="quizResult"></div>
+        </div>
+      </div>
+
+      <!-- Step 6: Quiz Taking Flow -->
+      <div class="test-section">
+        <h3>🎮 Step 6: Quiz Taking Flow</h3>
+        <div class="step-section">
+          <p><strong>Purpose:</strong> Test complete quiz taking experience</p>
+          <button class="btn-success" onclick="startQuizAttempt()">
+            Start Quiz Attempt
+          </button>
+          <button class="btn-primary" onclick="submitQuizAnswer()">
+            Submit Answer
+          </button>
+          <button class="btn-warning" onclick="getAttemptStatus()">
+            Get Attempt Status
+          </button>
+          <button class="btn-info" onclick="completeQuizAttempt()">
+            Complete Quiz
+          </button>
+          <div id="quizTakingResult"></div>
+        </div>
+      </div>
+
+      <!-- Current State Display -->
+      <div class="test-section">
+        <h3>📊 Current Test State</h3>
+        <div class="data-display" id="currentState">
+          No data yet - run tests to populate
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Global state
+      let testState = {
+        token: null,
+        userId: null,
+        userEmail: null,
+        workspaceId: null,
+        threadId: null,
+        quizId: null,
+        attemptId: null,
+      };
+
+      function updateCurrentState() {
+        document.getElementById('currentState').innerHTML = `
+                <strong>Current Test State:</strong><br>
+                User ID: ${testState.userId || 'Not set'}<br>
+                User Email: ${testState.userEmail || 'Not set'}<br>
+                Workspace ID: ${testState.workspaceId || 'Not set'}<br>
+                Thread ID: ${testState.threadId || 'Not set'}<br>
+                Quiz ID: ${testState.quizId || 'Not set'}<br>
+                Attempt ID: ${testState.attemptId || 'Not set'}
+            `;
+      }
+
+      function updateFlowStep(stepNumber, status = 'active') {
+        const step = document.getElementById(`step${stepNumber}`);
+        step.className = `flow-step ${status}`;
+      }
+
+      function displayResult(elementId, type, message, data = null) {
+        const element = document.getElementById(elementId);
+        const timestamp = new Date().toLocaleTimeString();
+        element.innerHTML = `
+                <div class="result ${type}">
+                    <strong>[${timestamp}] ${message}</strong>
+                    ${data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : ''}
+                </div>
+            `;
+      }
+
+      function appendResult(elementId, type, message, data = null) {
+        const element = document.getElementById(elementId);
+        const timestamp = new Date().toLocaleTimeString();
+        element.innerHTML += `
+                <div class="result ${type}">
+                    <strong>[${timestamp}] ${message}</strong>
+                    ${data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : ''}
+                </div>
+            `;
+      }
+
+      async function makeRequest(url, options = {}) {
+        const token = document.getElementById('jwtToken').value;
+        const baseUrl = document.getElementById('apiUrl').value;
+
+        const defaultOptions = {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        };
+
+        const response = await fetch(`${baseUrl}${url}`, {
+          ...defaultOptions,
+          ...options,
+          headers: { ...defaultOptions.headers, ...options.headers },
+        });
+
+        let data;
+        try {
+          data = await response.json();
+        } catch (e) {
+          data = {
+            error: 'Invalid JSON response',
+            responseText: await response.text(),
+          };
+        }
+
+        return { response, data };
+      }
+
+      // Step 1: Extract Token Info
+      function extractTokenInfo() {
+        const token = document.getElementById('jwtToken').value;
+        if (!token) {
+          displayResult('tokenInfo', 'error', 'Please enter a JWT token');
+          return;
+        }
+
+        try {
+          // Decode JWT token (basic decode, not verification)
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split('')
+              .map(function (c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+              })
+              .join(''),
+          );
+
+          const decoded = JSON.parse(jsonPayload);
+
+          testState.userId = decoded.sub || decoded.user_id || decoded.id;
+          testState.userEmail = decoded.email;
+          testState.token = token;
+
+          document.getElementById('userId').value = testState.userId || '';
+          document.getElementById('userEmail').value =
+            testState.userEmail || '';
+
+          displayResult(
+            'tokenInfo',
+            'success',
+            'Token decoded successfully',
+            decoded,
+          );
+          updateCurrentState();
+          updateFlowStep(1, 'completed');
+        } catch (error) {
+          displayResult('tokenInfo', 'error', 'Failed to decode token', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Step 1: Test Authentication
+      async function testAuthentication() {
+        updateFlowStep(1, 'active');
+        try {
+          const { response, data } = await makeRequest('/auth/me');
+
+          if (response.ok) {
+            testState.userId = data.id || data.user_id || data.sub;
+            testState.userEmail = data.email;
+
+            document.getElementById('userId').value = testState.userId || '';
+            document.getElementById('userEmail').value =
+              testState.userEmail || '';
+
+            displayResult(
+              'authResult',
+              'success',
+              'Authentication successful',
+              data,
+            );
+            updateFlowStep(1, 'completed');
+            updateCurrentState();
+          } else {
+            displayResult(
+              'authResult',
+              'error',
+              `Authentication failed (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult('authResult', 'error', 'Authentication error', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Step 2: Create Workspace
+      async function createWorkspace() {
+        updateFlowStep(2, 'active');
+        const workspaceName = document.getElementById('workspaceName').value;
+
+        if (!workspaceName) {
+          displayResult(
+            'workspaceResult',
+            'error',
+            'Please enter a workspace name',
+          );
+          return;
+        }
+
+        try {
+          const workspaceData = {
+            name: workspaceName,
+            description: 'Test workspace for quiz functionality',
+          };
+
+          const { response, data } = await makeRequest('/workspaces', {
+            method: 'POST',
+            body: JSON.stringify(workspaceData),
+          });
+
+          if (response.ok) {
+            testState.workspaceId = data.id;
+            document.getElementById('workspaceId').value =
+              testState.workspaceId;
+            displayResult(
+              'workspaceResult',
+              'success',
+              'Workspace created successfully',
+              data,
+            );
+            updateFlowStep(2, 'completed');
+            updateCurrentState();
+          } else {
+            displayResult(
+              'workspaceResult',
+              'error',
+              `Failed to create workspace (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult(
+            'workspaceResult',
+            'error',
+            'Workspace creation error',
+            { error: error.message },
+          );
+        }
+      }
+
+      async function listWorkspaces() {
+        try {
+          const { response, data } = await makeRequest('/workspaces');
+
+          if (response.ok) {
+            appendResult(
+              'workspaceResult',
+              'info',
+              `Found ${data.length || 0} workspaces`,
+              data,
+            );
+
+            // If we have workspaces, suggest using the first one
+            if (data && data.length > 0 && !testState.workspaceId) {
+              testState.workspaceId = data[0].id;
+              document.getElementById('workspaceId').value =
+                testState.workspaceId;
+              updateCurrentState();
+            }
+          } else {
+            appendResult(
+              'workspaceResult',
+              'error',
+              `Failed to list workspaces (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          appendResult('workspaceResult', 'error', 'List workspaces error', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Step 3: Create Thread
+      async function createThread() {
+        updateFlowStep(3, 'active');
+        const threadTitle = document.getElementById('threadTitle').value;
+        const workspaceId =
+          testState.workspaceId || document.getElementById('workspaceId').value;
+
+        if (!threadTitle || !workspaceId) {
+          displayResult(
+            'threadResult',
+            'error',
+            'Please enter thread title and ensure workspace is selected',
+          );
+          return;
+        }
+
+        try {
+          const threadData = {
+            title: threadTitle,
+            description: 'Thread for testing quiz functionality',
+            workspaceId: workspaceId,
+          };
+
+          const { response, data } = await makeRequest('/threads', {
+            method: 'POST',
+            body: JSON.stringify(threadData),
+          });
+
+          if (response.ok) {
+            testState.threadId = data.id;
+            document.getElementById('threadId').value = testState.threadId;
+            displayResult(
+              'threadResult',
+              'success',
+              'Thread created successfully',
+              data,
+            );
+            updateFlowStep(3, 'completed');
+            updateCurrentState();
+          } else {
+            displayResult(
+              'threadResult',
+              'error',
+              `Failed to create thread (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult('threadResult', 'error', 'Thread creation error', {
+            error: error.message,
+          });
+        }
+      }
+
+      async function listThreads() {
+        const workspaceId =
+          testState.workspaceId || document.getElementById('workspaceId').value;
+
+        if (!workspaceId) {
+          appendResult(
+            'threadResult',
+            'error',
+            'Please select a workspace first',
+          );
+          return;
+        }
+
+        try {
+          const { response, data } = await makeRequest(
+            `/workspaces/${workspaceId}/threads`,
+          );
+
+          if (response.ok) {
+            appendResult(
+              'threadResult',
+              'info',
+              `Found ${data.length || 0} threads`,
+              data,
+            );
+
+            // If we have threads, suggest using the first one
+            if (data && data.length > 0 && !testState.threadId) {
+              testState.threadId = data[0].id;
+              document.getElementById('threadId').value = testState.threadId;
+              updateCurrentState();
+            }
+          } else {
+            appendResult(
+              'threadResult',
+              'error',
+              `Failed to list threads (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          appendResult('threadResult', 'error', 'List threads error', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Step 4: Permission Testing
+      async function testAdminPermission() {
+        updateFlowStep(4, 'active');
+        const userId =
+          testState.userId || document.getElementById('userId').value;
+        const threadId =
+          testState.threadId || document.getElementById('threadId').value;
+
+        if (!userId || !threadId) {
+          displayResult(
+            'permissionResult',
+            'error',
+            'Please ensure user ID and thread ID are set',
+          );
+          return;
+        }
+
+        try {
+          const permissionData = { userId, threadId };
+          const { response, data } = await makeRequest(
+            '/quizzes/check-admin-or-moderator',
+            {
+              method: 'POST',
+              body: JSON.stringify(permissionData),
+            },
+          );
+
+          const status = data.success ? 'success' : 'warning';
+          displayResult(
+            'permissionResult',
+            status,
+            `Admin/Moderator check: ${data.success ? 'AUTHORIZED' : 'NOT AUTHORIZED'}`,
+            data,
+          );
+
+          if (data.success) {
+            updateFlowStep(4, 'completed');
+          }
+        } catch (error) {
+          displayResult('permissionResult', 'error', 'Permission check error', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Step 5: Quiz Creation
+      async function createQuizInThread() {
+        updateFlowStep(5, 'active');
+        const threadId =
+          testState.threadId || document.getElementById('threadId').value;
+        const quizTitle = document.getElementById('quizTitle').value;
+
+        if (!threadId || !quizTitle) {
+          displayResult(
+            'quizResult',
+            'error',
+            'Please ensure thread ID and quiz title are set',
+          );
+          return;
+        }
+
+        const quizData = {
+          title: quizTitle,
+          description: 'Test quiz created by workspace admin/moderator',
+          timeAllocated: 30,
+          questions: [
+            {
+              questionText: 'What is the purpose of this quiz?',
+              marks: 5,
+              options: [
+                { text: 'To test functionality', isCorrect: true },
+                { text: 'For fun', isCorrect: false },
+                { text: 'No purpose', isCorrect: false },
+              ],
+            },
+            {
+              questionText: 'Who can create quizzes in a thread?',
+              marks: 5,
+              options: [
+                { text: 'Anyone', isCorrect: false },
+                {
+                  text: 'Only workspace admins and thread moderators',
+                  isCorrect: true,
+                },
+                { text: 'Only thread creators', isCorrect: false },
+              ],
+            },
+          ],
+        };
+
+        try {
+          const { response, data } = await makeRequest(
+            `/quizzes/thread/${threadId}`,
+            {
+              method: 'POST',
+              body: JSON.stringify(quizData),
+            },
+          );
+
+          if (response.ok && data.quiz) {
+            testState.quizId = data.quiz.id;
+            document.getElementById('quizId').value = testState.quizId;
+            displayResult(
+              'quizResult',
+              'success',
+              'Quiz created successfully in thread',
+              data,
+            );
+            updateFlowStep(5, 'completed');
+            updateCurrentState();
+          } else {
+            displayResult(
+              'quizResult',
+              'error',
+              `Failed to create quiz (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult('quizResult', 'error', 'Quiz creation error', {
+            error: error.message,
+          });
+        }
+      }
+
+      async function listQuizzesInThread() {
+        const threadId =
+          testState.threadId || document.getElementById('threadId').value;
+
+        if (!threadId) {
+          appendResult('quizResult', 'error', 'Please ensure thread ID is set');
+          return;
+        }
+
+        try {
+          const { response, data } = await makeRequest(
+            `/quizzes/thread/${threadId}`,
+          );
+
+          if (response.ok) {
+            appendResult(
+              'quizResult',
+              'info',
+              `Found ${data.length || 0} quizzes in thread`,
+              data,
+            );
+
+            // If we have quizzes, suggest using the first one
+            if (data && data.length > 0 && !testState.quizId) {
+              testState.quizId = data[0].id;
+              document.getElementById('quizId').value = testState.quizId;
+              updateCurrentState();
+            }
+          } else {
+            appendResult(
+              'quizResult',
+              'error',
+              `Failed to list quizzes (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          appendResult('quizResult', 'error', 'List quizzes error', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Step 6: Quiz Taking
+      async function startQuizAttempt() {
+        updateFlowStep(6, 'active');
+        const quizId =
+          testState.quizId || document.getElementById('quizId').value;
+        const userId =
+          testState.userId || document.getElementById('userId').value;
+
+        if (!quizId || !userId) {
+          displayResult(
+            'quizTakingResult',
+            'error',
+            'Please ensure quiz ID and user ID are set',
+          );
+          return;
+        }
+
+        try {
+          const startData = { quizId, userId };
+          const { response, data } = await makeRequest('/quizzes/start', {
+            method: 'POST',
+            body: JSON.stringify(startData),
+          });
+
+          if (response.ok && data.attemptId) {
+            testState.attemptId = data.attemptId;
+            displayResult(
+              'quizTakingResult',
+              'success',
+              'Quiz attempt started successfully',
+              data,
+            );
+            updateFlowStep(6, 'completed');
+            updateCurrentState();
+          } else {
+            displayResult(
+              'quizTakingResult',
+              'error',
+              `Failed to start quiz (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult('quizTakingResult', 'error', 'Start quiz error', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Initialize
+      updateCurrentState();
+
+      // Auto-extract token info when token is pasted
+      document
+        .getElementById('jwtToken')
+        .addEventListener('input', function () {
+          if (this.value && this.value.length > 100) {
+            setTimeout(extractTokenInfo, 500);
+          }
+        });
+    </script>
+  </body>
+</html>

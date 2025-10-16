@@ -13,8 +13,7 @@ CREATE TABLE users (
     reset_password_token VARCHAR(255),
     reset_password_expires TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    image_url TEXT
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Workspaces table
@@ -251,9 +250,10 @@ CREATE TABLE answer_option (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   question_id UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
   answer_sequence_letter VARCHAR(1) NOT NULL CHECK (answer_sequence_letter IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j')),
-  answer VARCHAR(500),
+  answer VARCHAR(50),
   image_url VARCHAR(1024),
-  is_correct BOOLEAN NOT NULL DEFAULT FALSE
+  is_correct BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE quiz_attempt (
@@ -264,7 +264,6 @@ CREATE TABLE quiz_attempt (
   time_taken TIME,
   marks FLOAT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  completed BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE user_answer (
@@ -278,70 +277,3 @@ CREATE TABLE user_answer (
 );
 
 
-
--- Create replies table for threaded conversations
--- This migration creates a dedicated replies table to handle message replies properly
-
-CREATE TABLE IF NOT EXISTS replies (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    parent_message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_replies_parent_message ON replies (parent_message_id);
-CREATE INDEX IF NOT EXISTS idx_replies_user ON replies (user_id);
-CREATE INDEX IF NOT EXISTS idx_replies_workspace ON replies (workspace_id);
-CREATE INDEX IF NOT EXISTS idx_replies_created_at ON replies (created_at);
-
--- Add trigger to update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_replies_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER replies_updated_at
-    BEFORE UPDATE ON replies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_replies_updated_at();
-
--- Add reply_count column to messages table to track number of replies
-ALTER TABLE messages 
-ADD COLUMN IF NOT EXISTS reply_count INTEGER DEFAULT 0;
-
--- Create function to update reply count when replies are added/removed
-CREATE OR REPLACE FUNCTION update_message_reply_count()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        UPDATE messages 
-        SET reply_count = reply_count + 1 
-        WHERE id = NEW.parent_message_id;
-        RETURN NEW;
-    ELSIF TG_OP = 'DELETE' THEN
-        UPDATE messages 
-        SET reply_count = reply_count - 1 
-        WHERE id = OLD.parent_message_id;
-        RETURN OLD;
-    END IF;
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create triggers to automatically update reply count
-CREATE TRIGGER replies_insert_update_count
-    AFTER INSERT ON replies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_message_reply_count();
-
-CREATE TRIGGER replies_delete_update_count
-    AFTER DELETE ON replies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_message_reply_count();

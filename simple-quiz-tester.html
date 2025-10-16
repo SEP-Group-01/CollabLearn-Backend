@@ -1,0 +1,280 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Quiz API Tester</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+      }
+      input[type='text'] {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      .result {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 4px;
+        white-space: pre-wrap;
+      }
+      .success {
+        border-color: #28a745;
+        background: #d4edda;
+      }
+      .error {
+        border-color: #dc3545;
+        background: #f8d7da;
+      }
+      h1 {
+        color: #333;
+      }
+      h3 {
+        color: #666;
+        margin-top: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🚀 Quiz API Tester</h1>
+
+      <h3>Configuration</h3>
+      <input
+        type="text"
+        id="apiBase"
+        value="http://localhost:3000/api"
+        placeholder="API Base URL"
+      />
+      <input
+        type="text"
+        id="authToken"
+        placeholder="Paste your JWT token here (including 'Bearer ')"
+      />
+      <input
+        type="text"
+        id="threadId"
+        placeholder="Thread ID (optional for some tests)"
+      />
+
+      <h3>Tests</h3>
+      <button onclick="testHealth()">1. Test Health Check</button>
+      <button onclick="testListQuizzes()">2. List All Quizzes</button>
+      <button onclick="testListByThread()">3. List Quizzes by Thread</button>
+      <button onclick="testCreateQuiz()">4. Create Sample Quiz</button>
+
+      <div id="results"></div>
+    </div>
+
+    <script>
+      function log(message, isError = false) {
+        const results = document.getElementById('results');
+        const div = document.createElement('div');
+        div.className = `result ${isError ? 'error' : 'success'}`;
+        div.textContent = message;
+        results.appendChild(div);
+        console.log(message);
+      }
+
+      function clearResults() {
+        document.getElementById('results').innerHTML = '';
+      }
+
+      async function testHealth() {
+        clearResults();
+        log('🔍 Testing Health Check...');
+
+        try {
+          const apiBase = document.getElementById('apiBase').value;
+          const response = await fetch(`${apiBase}/quizzes`);
+          const data = await response.json();
+
+          if (response.ok) {
+            log(`✅ SUCCESS: ${JSON.stringify(data, null, 2)}`);
+          } else {
+            log(
+              `❌ FAILED: ${response.status} - ${JSON.stringify(data, null, 2)}`,
+              true,
+            );
+          }
+        } catch (error) {
+          log(`❌ ERROR: ${error.message}`, true);
+        }
+      }
+
+      async function testListQuizzes() {
+        log('\n🔍 Testing List All Quizzes...');
+
+        try {
+          const apiBase = document.getElementById('apiBase').value;
+          const authToken = document.getElementById('authToken').value;
+
+          const headers = { 'Content-Type': 'application/json' };
+          if (authToken) {
+            headers['Authorization'] = authToken;
+          }
+
+          const response = await fetch(`${apiBase}/quizzes`, { headers });
+          const data = await response.json();
+
+          if (response.ok) {
+            log(
+              `✅ SUCCESS: Found ${Array.isArray(data) ? data.length : 0} quizzes`,
+            );
+            log(JSON.stringify(data, null, 2));
+          } else {
+            log(
+              `❌ FAILED: ${response.status} - ${JSON.stringify(data, null, 2)}`,
+              true,
+            );
+          }
+        } catch (error) {
+          log(`❌ ERROR: ${error.message}`, true);
+        }
+      }
+
+      async function testListByThread() {
+        log('\n🔍 Testing List Quizzes by Thread...');
+
+        const threadId = document.getElementById('threadId').value;
+        if (!threadId) {
+          log('❌ Please enter a Thread ID first', true);
+          return;
+        }
+
+        try {
+          const apiBase = document.getElementById('apiBase').value;
+          const authToken = document.getElementById('authToken').value;
+
+          const headers = { 'Content-Type': 'application/json' };
+          if (authToken) {
+            headers['Authorization'] = authToken;
+          }
+
+          const response = await fetch(
+            `${apiBase}/threads/${threadId}/quizzes`,
+            { headers },
+          );
+          const data = await response.json();
+
+          if (response.ok) {
+            log(
+              `✅ SUCCESS: Found ${Array.isArray(data) ? data.length : 0} quizzes for thread`,
+            );
+            log(JSON.stringify(data, null, 2));
+          } else {
+            log(
+              `❌ FAILED: ${response.status} - ${JSON.stringify(data, null, 2)}`,
+              true,
+            );
+          }
+        } catch (error) {
+          log(`❌ ERROR: ${error.message}`, true);
+        }
+      }
+
+      async function testCreateQuiz() {
+        log('\n🔍 Testing Create Quiz...');
+
+        const threadId = document.getElementById('threadId').value;
+        const authToken = document.getElementById('authToken').value;
+
+        if (!threadId) {
+          log('❌ Please enter a Thread ID first', true);
+          return;
+        }
+
+        if (!authToken) {
+          log('❌ Please enter an Authorization token first', true);
+          return;
+        }
+
+        const quizData = {
+          title: 'HTML Test Quiz',
+          description: 'Created from HTML tester',
+          timeAllocated: 30,
+          questions: [
+            {
+              questionText: 'What is 2 + 2?',
+              marks: 5,
+              options: [
+                { text: '3', isCorrect: false },
+                { text: '4', isCorrect: true },
+                { text: '5', isCorrect: false },
+              ],
+            },
+          ],
+          tags: ['html-test'],
+          resourceTags: ['test'],
+        };
+
+        try {
+          const apiBase = document.getElementById('apiBase').value;
+
+          const response = await fetch(
+            `${apiBase}/threads/${threadId}/quizzes/create`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: authToken,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(quizData),
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            log(
+              `✅ SUCCESS: Quiz created with ID: ${data.quizId || data.quiz?.id}`,
+            );
+            log(JSON.stringify(data, null, 2));
+          } else {
+            log(
+              `❌ FAILED: ${response.status} - ${JSON.stringify(data, null, 2)}`,
+              true,
+            );
+          }
+        } catch (error) {
+          log(`❌ ERROR: ${error.message}`, true);
+        }
+      }
+
+      // Auto-load token from localStorage if available
+      window.onload = function () {
+        const token =
+          localStorage.getItem('accessToken') ||
+          sessionStorage.getItem('accessToken');
+        if (token) {
+          document.getElementById('authToken').value = `Bearer ${token}`;
+          log('📝 Auto-loaded token from storage');
+        }
+      };
+    </script>
+  </body>
+</html>
