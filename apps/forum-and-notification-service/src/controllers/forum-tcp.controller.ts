@@ -160,6 +160,48 @@ export class ForumTcpController {
     }
   }
 
+  // Delete message via TCP
+  @MessagePattern({ cmd: 'delete_message' })
+  async deleteMessage(
+    @Payload() data: { messageId: string; userId: string },
+  ) {
+    try {
+      this.logger.log(`TCP: Deleting message ${data.messageId}`);
+      const result = await this.forumService.deleteMessage(
+        data.messageId,
+        data.userId,
+      );
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Error deleting message:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  // Delete reply via TCP
+  @MessagePattern({ cmd: 'delete_reply' })
+  async deleteReply(
+    @Payload() data: { replyId: string; userId: string },
+  ) {
+    try {
+      this.logger.log(`TCP: Deleting reply ${data.replyId}`);
+      const result = await this.forumService.deleteReply(
+        data.replyId,
+        data.userId,
+      );
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Error deleting reply:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
   // Legacy TCP endpoints for backward compatibility
   @MessagePattern({ cmd: 'get_group_messages' })
   async getGroupMessagesLegacy(
