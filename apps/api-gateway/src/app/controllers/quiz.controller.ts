@@ -23,7 +23,46 @@ export class QuizController {
   ) {}
 
   // Helper method to validate token
-  private async validateAuthToken(authHeader: string) {
+  // private async validateAuthToken(authHeader: string) {
+  //   if (!authHeader) {
+  //     throw new HttpException(
+  //       'Authorization header is required',
+  //       HttpStatus.UNAUTHORIZED,
+  //     );
+  //   }
+
+  //   const token = authHeader.startsWith('Bearer ')
+  //     ? authHeader.substring(7)
+  //     : authHeader;
+
+  //   try {
+  //     const result = await firstValueFrom(
+  //       this.authService.send({ cmd: 'validate_token' }, { token }),
+  //     );
+
+  //     console.log('Auth service response:', result);
+
+  //     // Handle different response structures
+  //     if (result && (result.valid || result.success)) {
+  //       return {
+  //         valid: true,
+  //         success: true,
+  //         user: result.user ||
+  //           result.data || { id: result.userId || result.sub },
+  //       };
+  //     }
+
+  //     throw new Error('Token validation failed');
+  //   } catch (error) {
+  //     console.error('Token validation error:', error);
+  //     throw new HttpException(
+  //       'Invalid or expired token',
+  //       HttpStatus.UNAUTHORIZED,
+  //     );
+  //   }
+  // }
+
+   private async validateAuthToken(authHeader: string) {
     if (!authHeader) {
       throw new HttpException(
         'Authorization header is required',
@@ -36,25 +75,30 @@ export class QuizController {
       : authHeader;
 
     try {
+      console.log('Sending token validation request to auth service...');
       const result = await firstValueFrom(
         this.authService.send({ cmd: 'validate_token' }, { token }),
       );
-
-      console.log('Auth service response:', result);
-
-      // Handle different response structures
+      
+      console.log('Auth service raw response:', result);
+      
+      // Handle different response structures and normalize
       if (result && (result.valid || result.success)) {
-        return {
+        const normalizedResponse = {
           valid: true,
           success: true,
-          user: result.user ||
-            result.data || { id: result.userId || result.sub },
+          user: result.user || result.data || { 
+            id: result.userId || result.sub || result.id 
+          }
         };
+        console.log('Normalized auth response:', normalizedResponse);
+        return normalizedResponse;
+      } else {
+        console.log('Auth service returned unsuccessful validation');
+        throw new Error('Token validation failed by auth service');
       }
-
-      throw new Error('Token validation failed');
     } catch (error) {
-      console.error('Token validation error:', error);
+      console.error('Auth service validation error:', error.message);
       throw new HttpException(
         'Invalid or expired token',
         HttpStatus.UNAUTHORIZED,
@@ -186,6 +230,7 @@ export class QuizController {
   @Post('thread/:threadId')
   async createQuizInThread(
     @Param('threadId') threadId: string,
+    
     @Headers('authorization') authorizationHeader: string,
     @Body()
     body: {
@@ -283,14 +328,75 @@ export class QuizController {
 
   // Thread scoped quizzes (simpler path)
   @Get('thread/:threadId')
-  async getQuizzesByThread(@Param('threadId') threadId: string) {
-    console.log('Fetching quizzes for thread:', threadId);
+  async getQuizzesByThread(
+    @Param('threadId') threadId: string,
+    @Headers('authorization') authorizationHeader: string,
+  ) {
+    console.log('🔍 [API Gateway] Fetching quizzes for thread:', threadId);
+    console.log('🔍 [API Gateway] Authorization header received:', authorizationHeader ? 'Present' : 'Missing');
+    
+    let userId: string | undefined;
+    
+    // Try to get userId from auth token if present
+    if (authorizationHeader) {
+      try {
+        console.log('🔍 [API Gateway] Attempting auth service validation...');
+        const authResult = await this.validateAuthToken(authorizationHeader);
+        console.log('🔍 [API Gateway] Auth service response:', JSON.stringify(authResult, null, 2));
+        
+        // Handle different response structures from auth service
+        if (authResult && (authResult.valid || authResult.success)) {
+          userId = authResult.user?.id;
+          console.log('✅ [API Gateway] Auth service validated, userId:', userId);
+        } else {
+          console.log('⚠️  [API Gateway] Auth service validation failed, trying JWT decode backup...');
+          
+          // Fallback: Try to decode JWT directly
+          const token = authorizationHeader.startsWith('Bearer ') 
+            ? authorizationHeader.substring(7) 
+            : authorizationHeader;
+          
+          try {
+            // Simple base64 decode of JWT payload (not secure validation, just extraction)
+            const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+            userId = payload.id || payload.sub || payload.userId;
+            console.log('✅ [API Gateway] JWT decode backup successful, userId:', userId);
+            console.log('🔍 [API Gateway] JWT payload:', JSON.stringify(payload, null, 2));
+          } catch (jwtError) {
+            console.log('❌ [API Gateway] JWT decode backup failed:', jwtError.message);
+          }
+        }
+      } catch (error) {
+        console.log('❌ [API Gateway] Auth validation error, trying JWT decode backup...');
+        console.log('❌ [API Gateway] Auth error details:', error);
+        
+        // Fallback: Try to decode JWT directly
+        try {
+          const token = authorizationHeader.startsWith('Bearer ') 
+            ? authorizationHeader.substring(7) 
+            : authorizationHeader;
+          
+          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+          userId = payload.id || payload.sub || payload.userId;
+          console.log('✅ [API Gateway] JWT decode backup successful after error, userId:', userId);
+        } catch (jwtError) {
+          console.log('❌ [API Gateway] JWT decode backup also failed:', jwtError.message);
+        }
+      }
+    } else {
+      console.log('⚠️  [API Gateway] No authorization header provided');
+    }
+    
+    console.log('🚀 [API Gateway] Final userId for quiz service:', userId);
+    
     try {
-      return await firstValueFrom(
-        this.quizService.send({ cmd: 'list_quizzes' }, { threadId }),
+      const result = await firstValueFrom(
+        this.quizService.send({ cmd: 'list_quizzes' }, { threadId, userId }),
       );
+      console.log('✅ [API Gateway] Quiz service response received');
+      return result;
     } catch (error) {
-      console.error('Error fetching quizzes by thread:', error);
+      console.error('❌ [API Gateway] Error fetching quizzes by thread:', error);
       throw new HttpException(
         error?.message || 'Failed to fetch quizzes',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -329,14 +435,14 @@ export class QuizController {
 
     try {
       const authResult = await this.validateAuthToken(authorizationHeader);
-      if (!authResult.valid) {
+      if (!authResult || !(authResult.valid || authResult.success)) {
         throw new HttpException(
           'Invalid or expired token',
           HttpStatus.UNAUTHORIZED,
         );
       }
 
-      const userId = authResult.user.id;
+      const userId = authResult.user?.id;
 
       return await firstValueFrom(
         this.quizService.send(
@@ -372,14 +478,14 @@ export class QuizController {
 
     try {
       const authResult = await this.validateAuthToken(authorizationHeader);
-      if (!authResult.valid) {
+      if (!authResult || !(authResult.valid || authResult.success)) {
         throw new HttpException(
           'Invalid or expired token',
           HttpStatus.UNAUTHORIZED,
         );
       }
 
-      const userId = authResult.user.id;
+      const userId = authResult.user?.id;
 
       return await firstValueFrom(
         this.quizService.send(
@@ -416,12 +522,14 @@ export class QuizController {
 
     try {
       const authResult = await this.validateAuthToken(authorizationHeader);
-      if (!authResult.valid) {
+      if (!authResult || !(authResult.valid || authResult.success)) {
         throw new HttpException(
           'Invalid or expired token',
           HttpStatus.UNAUTHORIZED,
         );
       }
+
+      console.log("User ID:", authResult.user?.id);
 
       // The quiz service listens for 'attempt_quiz' message
       return await firstValueFrom(
@@ -429,6 +537,7 @@ export class QuizController {
           { cmd: 'attempt_quiz' },
           {
             attemptQuizDto: {
+              userId: authResult.user.id,
               attemptId: body.attemptId,
               answers: body.answers,
             },
@@ -451,24 +560,37 @@ export class QuizController {
     @Param('id') quizId: string,
     @Headers('authorization') authorizationHeader: string,
   ) {
-    console.log('Fetching my quiz attempts:', { quizId });
+    console.log('🔍 [API Gateway] Fetching my quiz attempts:', { quizId });
 
     try {
       const authResult = await this.validateAuthToken(authorizationHeader);
-      if (!authResult.valid) {
+      console.log('🔍 [API Gateway] Auth result for attempts:', authResult);
+      
+      if (!authResult || !(authResult.valid || authResult.success)) {
         throw new HttpException(
           'Invalid or expired token',
           HttpStatus.UNAUTHORIZED,
         );
       }
 
-      const userId = authResult.user.id;
+      const userId = authResult.user?.id;
+      console.log('🔍 [API Gateway] UserId for attempts:', userId);
+
+      if (!userId) {
+        throw new HttpException(
+          'User ID not found in token',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
 
       return await firstValueFrom(
         this.quizService.send({ cmd: 'view_results' }, { quizId, userId }),
       );
     } catch (error) {
-      console.error('Error fetching my quiz attempts:', error);
+      console.error('❌ [API Gateway] Error fetching my quiz attempts:', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         error?.message || 'Failed to fetch quiz attempts',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -487,7 +609,7 @@ export class QuizController {
 
     try {
       const authResult = await this.validateAuthToken(authorizationHeader);
-      if (!authResult.valid) {
+      if (!authResult || !(authResult.valid || authResult.success)) {
         throw new HttpException(
           'Invalid or expired token',
           HttpStatus.UNAUTHORIZED,
@@ -634,34 +756,65 @@ export class ThreadQuizController {
     @Param('threadId') threadId: string,
     @Headers('authorization') authorizationHeader: string,
   ) {
-    console.log('Fetching quizzes for thread:', threadId);
-    console.log('Auth header:', authorizationHeader);
+    console.log('🔍 [ThreadController] Fetching quizzes for thread:', threadId);
+    console.log('🔍 [ThreadController] Auth header:', authorizationHeader ? 'Present' : 'Missing');
+
+    let userId: string | undefined;
+
+    // Try to get userId from auth token if present
+    if (authorizationHeader) {
+      try {
+        console.log('🔍 [ThreadController] Attempting auth service validation...');
+        const authResult = await this.validateAuthToken(authorizationHeader);
+        console.log('🔍 [ThreadController] Auth service response:', JSON.stringify(authResult, null, 2));
+        
+        if (authResult && (authResult.valid || authResult.success)) {
+          userId = authResult.user?.id;
+          console.log('✅ [ThreadController] Auth service validated, userId:', userId);
+        } else {
+          console.log('⚠️  [ThreadController] Auth service validation failed, trying JWT decode backup...');
+          
+          // Fallback: Try to decode JWT directly
+          const token = authorizationHeader.startsWith('Bearer ') 
+            ? authorizationHeader.substring(7) 
+            : authorizationHeader;
+          
+          try {
+            const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+            userId = payload.id || payload.sub || payload.userId;
+            console.log('✅ [ThreadController] JWT decode backup successful, userId:', userId);
+          } catch (jwtError) {
+            console.log('❌ [ThreadController] JWT decode backup failed:', jwtError.message);
+          }
+        }
+      } catch (error) {
+        console.log('❌ [ThreadController] Auth validation error, trying JWT decode backup...');
+        
+        // Fallback: Try to decode JWT directly
+        try {
+          const token = authorizationHeader.startsWith('Bearer ') 
+            ? authorizationHeader.substring(7) 
+            : authorizationHeader;
+          
+          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+          userId = payload.id || payload.sub || payload.userId;
+          console.log('✅ [ThreadController] JWT decode backup successful after error, userId:', userId);
+        } catch (jwtError) {
+          console.log('❌ [ThreadController] JWT decode backup also failed:', jwtError.message);
+        }
+      }
+    }
+
+    console.log('🚀 [ThreadController] Final userId for quiz service:', userId);
 
     try {
-      // Validate token and check user permissions
-      const authResult = await this.validateAuthToken(authorizationHeader);
-      if (!authResult?.success) {
-        throw new HttpException(
-          'Invalid or expired token',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      const userId =
-        authResult.user.id || authResult.user.userId || authResult.user.sub;
-      console.log('User requesting quizzes:', userId);
-
-      // TODO: Add permission check to verify user has access to this thread
-      // This would check if user is workspace member and thread subscriber
-
-      return await firstValueFrom(
+      const result = await firstValueFrom(
         this.quizService.send({ cmd: 'list_quizzes' }, { threadId, userId }),
       );
+      console.log('✅ [ThreadController] Quiz service response received');
+      return result;
     } catch (error) {
-      console.error('Error fetching quizzes by thread:', error);
-      if (error instanceof HttpException) {
-        throw error;
-      }
+      console.error('❌ [ThreadController] Error fetching quizzes by thread:', error);
       throw new HttpException(
         error?.message || 'Failed to fetch quizzes',
         HttpStatus.INTERNAL_SERVER_ERROR,

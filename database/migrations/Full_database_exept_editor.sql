@@ -251,10 +251,9 @@ CREATE TABLE answer_option (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   question_id UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
   answer_sequence_letter VARCHAR(1) NOT NULL CHECK (answer_sequence_letter IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j')),
-  answer VARCHAR(50),
+  answer VARCHAR(500),
   image_url VARCHAR(1024),
-  is_correct BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  is_correct BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE quiz_attempt (
@@ -265,6 +264,7 @@ CREATE TABLE quiz_attempt (
   time_taken TIME,
   marks FLOAT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  completed BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE user_answer (

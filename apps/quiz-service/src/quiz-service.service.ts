@@ -18,6 +18,53 @@ import { SupabaseService } from './supabase.service';
 export class QuizService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
+  // Helper method to format milliseconds to PostgreSQL INTERVAL format
+  private formatTimeInterval(milliseconds: number): string {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  // Method to auto-expire attempts that have passed their expiration time
+  private async autoExpireAttempts(): Promise<void> {
+    const supabase = this.supabaseService.getClient();
+    const now = new Date();
+
+    // Find all incomplete attempts where expires_at is in the past
+    const { data: expiredAttempts, error } = await supabase
+      .from('quiz_attempt')
+      .select('id, created_at, expires_at')
+      .eq('completed', false)
+      .lt('expires_at', now.toISOString());
+
+    if (error) {
+      console.error('Error finding expired attempts:', error);
+      return;
+    }
+
+    if (expiredAttempts && expiredAttempts.length > 0) {
+      console.log(`Auto-expiring ${expiredAttempts.length} attempts`);
+      
+      // Auto-complete each expired attempt
+      for (const attempt of expiredAttempts) {
+        const timeTakenMs = new Date(attempt.expires_at).getTime() - new Date(attempt.created_at).getTime();
+        const timeTakenInterval = this.formatTimeInterval(timeTakenMs);
+        
+        await supabase
+          .from('quiz_attempt')
+          .update({
+            time_taken: timeTakenInterval,
+            marks: 0,
+            completed: true,
+          })
+          .eq('id', attempt.id);
+      }
+    }
+  }
+
   async createQuiz(
     createQuizDto: CreateQuizDto,
     userId: string,
@@ -47,6 +94,8 @@ export class QuizService {
     );
 
     // Insert quiz into the quizzes table
+    console.log('[createQuiz] Creating quiz with timeAllocated:', createQuizDto.timeAllocated);
+    
     const insertPayload: Record<string, unknown> = {
       title: createQuizDto.title,
       description: createQuizDto.description,
@@ -54,6 +103,8 @@ export class QuizService {
       creator_id: userId,
       thread_id: threadId,
     };
+    
+    console.log('[createQuiz] Insert payload:', insertPayload);
 
     const { data: quiz, error: quizError } = await supabase
       .from('quizzes')
@@ -127,9 +178,16 @@ export class QuizService {
   async listQuizzes(threadId?: string, userId?: string) {
     const supabase = this.supabaseService.getClient();
     
+    console.log('[QuizService.listQuizzes] Called with threadId:', threadId, 'userId:', userId);
+    console.log('[QuizService.listQuizzes] userId type:', typeof userId);
+    console.log('[QuizService.listQuizzes] userId truthiness:', !!userId);
+    
     if (!threadId) {
-      throw new Error('Thread ID is required to fetch quizzes');
+      throw new BadRequestException('Thread ID is required');
     }
+
+    // Auto-expire any attempts that have passed their expiration time
+    await this.autoExpireAttempts();
 
     // Query quizzes from `quizzes` and include nested questions + options + user info + attempts
     const { data: quizzes, error } = await supabase.from('quizzes').select(
@@ -210,24 +268,34 @@ export class QuizService {
             if (attempt.time_taken) {
               // Convert HH:MM:SS to minutes
               const timeParts = attempt.time_taken.split(':');
-              const minutes = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]) + 
-                             parseInt(timeParts[2]) / 60;
-              return sum + minutes;
+              const hours = parseInt(timeParts[0]) || 0;
+              const minutes = parseInt(timeParts[1]) || 0;
+              const seconds = parseInt(timeParts[2]) || 0;
+              const totalMinutes = hours * 60 + minutes + seconds / 60;
+              return sum + totalMinutes;
             }
             return sum;
           }, 0);
-          averageTime = totalTimeSum / totalAttempts;
+          averageTime = Math.round(totalTimeSum / totalAttempts); // Round to whole minutes
         }
 
         // Get student's attempts if userId is provided
         if (userId) {
+          console.log(`[QuizService.listQuizzes] Processing attempts for userId: ${userId}`);
+          console.log(`[QuizService.listQuizzes] Total attempts for quiz ${q.id}:`, attempts.length);
           const userAttempts = attempts.filter((attempt: any) => attempt.user_id === userId);
+          console.log(`[QuizService.listQuizzes] User attempts filtered:`, userAttempts.length);
+          if (userAttempts.length === 0) {
+            console.log(`[QuizService.listQuizzes] No attempts found for user ${userId} on quiz ${q.id}`);
+          }
           studentAttempts = userAttempts.map((attempt: any) => {
             let timeTaken = 0;
             if (attempt.time_taken) {
               const timeParts = attempt.time_taken.split(':');
-              timeTaken = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]) + 
-                         parseInt(timeParts[2]) / 60;
+              const hours = parseInt(timeParts[0]) || 0;
+              const minutes = parseInt(timeParts[1]) || 0;
+              const seconds = parseInt(timeParts[2]) || 0;
+              timeTaken = Math.round(hours * 60 + minutes + seconds / 60); // Round to whole minutes
             }
 
             return {
@@ -238,6 +306,9 @@ export class QuizService {
               date: new Date(attempt.created_at).toLocaleDateString(),
             };
           });
+          console.log(`[QuizService.listQuizzes] Final studentAttempts for quiz ${q.id}:`, studentAttempts);
+        } else {
+          console.log(`[QuizService.listQuizzes] No userId provided, studentAttempts will be empty`);
         }
       }
 
@@ -338,6 +409,13 @@ export class QuizService {
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
+    
+    console.log('[startQuiz] Retrieved quiz data:', {
+      id: quiz.id,
+      title: quiz.title,
+      allocated_time: quiz.allocated_time,
+      questions_count: quiz.quiz_questions?.length || 0
+    });
 
     // Check if user already has an incomplete attempt
     const { data: existingAttempt } = await supabase
@@ -345,61 +423,73 @@ export class QuizService {
       .select('*')
       .eq('quiz_id', startQuizDto.quizId)
       .eq('user_id', startQuizDto.userId)
-      .is('time_taken', null) // Not completed yet
-      .is('marks', null) // Not graded yet
+      .eq('completed', false) // Not completed yet
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
     if (existingAttempt) {
-      // Check if existing attempt has expired based on creation time + allocated time
       const now = new Date();
-      const createdAt = new Date(existingAttempt.created_at);
-      const expiresAt = new Date(
-        createdAt.getTime() + quiz.allocated_time * 60 * 1000,
-      );
+      let expiresAt: Date;
+      
+      // Check if expires_at exists (new schema) or calculate from created_at (legacy)
+      if (existingAttempt.expires_at) {
+        expiresAt = new Date(existingAttempt.expires_at);
+      } else {
+        // Fallback for legacy attempts without expires_at
+        const createdAt = new Date(existingAttempt.created_at);
+        expiresAt = new Date(createdAt.getTime() + quiz.allocated_time * 60 * 1000);
+        
+        // Update the attempt with expires_at for future use
+        await supabase
+          .from('quiz_attempt')
+          .update({ expires_at: expiresAt.toISOString() })
+          .eq('id', existingAttempt.id);
+      }
 
       if (now > expiresAt) {
-        // Attempt has expired, auto-complete it with 0 marks
+        // Attempt has expired, auto-complete it
+        const timeTakenMs = expiresAt.getTime() - new Date(existingAttempt.created_at).getTime();
+        const timeTakenInterval = this.formatTimeInterval(timeTakenMs);
+        
         await supabase
           .from('quiz_attempt')
           .update({
-            time_taken: quiz.allocated_time + ':00:00', // Set to full allocated time
+            time_taken: timeTakenInterval,
             marks: 0,
+            completed: true,
           })
           .eq('id', existingAttempt.id);
 
-        throw new BadRequestException(
-          'Previous attempt has expired. Please start a new attempt.',
-        );
-      }
+        console.log('Previous attempt expired and auto-completed, creating new attempt');
+      } else {
+        // Active attempt exists and hasn't expired - return resume data
+        const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
 
-      const timeRemaining = Math.max(
-        0,
-        Math.floor((expiresAt.getTime() - now.getTime()) / 1000),
-      );
-
-      return {
-        attemptId: existingAttempt.id,
-        startedAt: existingAttempt.created_at,
-        timeAllocated: quiz.allocated_time,
-        expiresAt: expiresAt.toISOString(),
-        timeRemaining,
-        quiz: {
-          id: quiz.id,
-          title: quiz.title,
-          description: quiz.description,
-          questions: quiz.quiz_questions?.map((q) => ({
-            ...q,
-            options: q.quiz_options?.map((opt) => ({
-              id: opt.id,
-              text: opt.text,
-              image: opt.image,
-              // Don't send isCorrect to frontend
+        console.log('[startQuiz] Resuming existing attempt with timeAllocated:', quiz.allocated_time);
+        return {
+          attemptId: existingAttempt.id,
+          startedAt: existingAttempt.created_at,
+          timeAllocated: quiz.allocated_time,
+          expiresAt: expiresAt.toISOString(),
+          timeRemaining,
+          isResume: true,
+          quiz: {
+            id: quiz.id,
+            title: quiz.title,
+            description: quiz.description,
+            questions: quiz.quiz_questions?.map((q) => ({
+              ...q,
+              options: q.quiz_options?.map((opt) => ({
+                id: opt.id,
+                text: opt.text,
+                image: opt.image,
+                sequence_letter: opt.sequence_letter,
+              })),
             })),
-          })),
-        },
-      };
+          },
+        };
+      }
     }
 
     // Create new attempt
@@ -421,6 +511,7 @@ export class QuizService {
         quiz_id: startQuizDto.quizId,
         user_id: startQuizDto.userId,
         attempt_nummber: attemptNumber,
+        expires_at: expiresAt.toISOString(),
       })
       .select()
       .single();
@@ -429,6 +520,10 @@ export class QuizService {
       throw new Error(`Failed to start quiz attempt: ${error.message}`);
     }
 
+    console.log('[startQuiz] Creating new attempt with quiz allocated_time:', quiz.allocated_time);
+    console.log('[startQuiz] Calculated expiresAt:', expiresAt.toISOString());
+    console.log('[startQuiz] Time remaining in seconds:', quiz.allocated_time * 60);
+    
     return {
       attemptId: attempt.id,
       startedAt: attempt.created_at,
@@ -445,7 +540,7 @@ export class QuizService {
             id: opt.id,
             text: opt.text,
             image: opt.image,
-            // Don't send isCorrect to frontend
+            sequence_letter: opt.sequence_letter,
           })),
         })),
       },
@@ -453,51 +548,91 @@ export class QuizService {
   }
 
   async getActiveAttempt(userId: string, quizId: string) {
+    console.log('[getActiveAttempt] Called with userId:', userId, 'quizId:', quizId);
     const supabase = this.supabaseService.getClient();
 
     // Get the most recent attempt that hasn't been completed yet
-    // Since your schema doesn't have status tracking, we'll consider an attempt
-    // active if it doesn't have time_taken and marks set
     const { data: attempt, error } = await supabase
       .from('quiz_attempt')
       .select('*')
       .eq('quiz_id', quizId)
       .eq('user_id', userId)
-      .is('time_taken', null) // Not completed yet
-      .is('marks', null) // Not graded yet
+      .eq('completed', false)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
+      
+    console.log('[getActiveAttempt] Query result - attempt:', attempt, 'error:', error);
 
     if (error || !attempt) {
-      return null;
+      console.log('[getActiveAttempt] No active attempt found or error occurred');
+      throw new NotFoundException('No active attempt found');
     }
 
-    // Since we don't have expires_at in schema, we'll use allocated time
-    const quiz = await this.getQuiz(quizId);
-    const createdAt = new Date(attempt.created_at);
-    const expiresAt = new Date(
-      createdAt.getTime() + quiz.allocated_time * 60 * 1000,
-    );
     const now = new Date();
-
-    if (now > expiresAt) {
-      // Attempt has expired, we could mark it as completed with 0 marks
-      // But for now, just return null
-      return null;
+    let expiresAt: Date;
+    
+    // Check if expires_at exists (new schema) or calculate from created_at (legacy)
+    if (attempt.expires_at) {
+      expiresAt = new Date(attempt.expires_at);
+    } else {
+      // Fallback for legacy attempts - get quiz and calculate expiration
+      const quiz = await this.getQuiz(quizId);
+      const createdAt = new Date(attempt.created_at);
+      expiresAt = new Date(createdAt.getTime() + quiz.allocated_time * 60 * 1000);
+      
+      // Update the attempt with expires_at for future use
+      await supabase
+        .from('quiz_attempt')
+        .update({ expires_at: expiresAt.toISOString() })
+        .eq('id', attempt.id);
     }
 
-    const timeRemaining = Math.max(
-      0,
-      Math.floor((expiresAt.getTime() - now.getTime()) / 1000),
-    );
+    // Check if attempt has expired
+    if (now > expiresAt) {
+      // Attempt has expired, auto-complete it
+      const timeTakenMs = expiresAt.getTime() - new Date(attempt.created_at).getTime();
+      const timeTakenInterval = this.formatTimeInterval(timeTakenMs);
+      
+      await supabase
+        .from('quiz_attempt')
+        .update({
+          time_taken: timeTakenInterval,
+          marks: 0,
+          completed: true,
+        })
+        .eq('id', attempt.id);
+        
+      throw new NotFoundException('Active attempt has expired and was auto-submitted');
+    }
+
+    // Calculate remaining time
+    const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
+
+    // Get quiz details for resume
+    const quiz = await this.getQuiz(quizId);
 
     return {
       attemptId: attempt.id,
       startedAt: attempt.created_at,
       expiresAt: expiresAt.toISOString(),
       timeRemaining,
+      timeAllocated: quiz.allocated_time,
       status: 'active',
+      quiz: {
+        id: quiz.id,
+        title: quiz.title,
+        description: quiz.description,
+        questions: quiz.quiz_questions?.map((q) => ({
+          ...q,
+          options: q.quiz_options?.map((opt) => ({
+            id: opt.id,
+            text: opt.text,
+            image: opt.image,
+            sequence_letter: opt.sequence_letter,
+          })),
+        })),
+      },
     };
   }
 
@@ -516,8 +651,39 @@ export class QuizService {
     }
 
     // Check if already completed
-    if (attempt.marks !== null || attempt.time_taken !== null) {
+    if (attempt.completed) {
       throw new BadRequestException('Quiz attempt already completed');
+    }
+
+    const currentTime = new Date();
+    let expiresAt: Date;
+    
+    // Check expiration time
+    if (attempt.expires_at) {
+      expiresAt = new Date(attempt.expires_at);
+    } else {
+      // Fallback for legacy attempts
+      const quiz = await this.getQuiz(attempt.quiz_id);
+      const createdAt = new Date(attempt.created_at);
+      expiresAt = new Date(createdAt.getTime() + quiz.allocated_time * 60 * 1000);
+    }
+
+    // Check if attempt has expired
+    if (currentTime > expiresAt) {
+      // Auto-complete expired attempt with 0 marks
+      const timeTakenMs = expiresAt.getTime() - new Date(attempt.created_at).getTime();
+      const timeTakenInterval = this.formatTimeInterval(timeTakenMs);
+      
+      await supabase
+        .from('quiz_attempt')
+        .update({
+          time_taken: timeTakenInterval,
+          marks: 0,
+          completed: true,
+        })
+        .eq('id', attempt.id);
+        
+      throw new BadRequestException('Quiz attempt has expired and was auto-submitted with 0 marks');
     }
 
     // Get quiz to calculate marks
@@ -525,25 +691,38 @@ export class QuizService {
     let marksObtained = 0;
 
     // Insert user answers and calculate marks
+    console.log('[attemptQuiz] Processing answers:', attemptQuizDto.answers);
+    console.log('[attemptQuiz] Quiz questions structure:', JSON.stringify(quiz.quiz_questions, null, 2));
+    
     for (const answer of attemptQuizDto.answers) {
+      console.log('[attemptQuiz] Processing answer:', answer);
+      
       const question = quiz.quiz_questions.find(
         (q) => q.id === answer.questionId,
       );
 
       if (question) {
+        console.log('[attemptQuiz] Found question:', question.id);
+        console.log('[attemptQuiz] Question options:', question.quiz_options);
+        
         // Convert selected option IDs to sequence letters for storage
         const selectedLetters: string[] = [];
         for (const optionId of answer.selectedOptionIds) {
+          console.log('[attemptQuiz] Looking for option ID:', optionId);
           const option = question.quiz_options.find(
             (opt) => opt.id === optionId,
           );
+          console.log('[attemptQuiz] Found option:', option);
           if (option && option.sequence_letter) {
             selectedLetters.push(option.sequence_letter);
+            console.log('[attemptQuiz] Added sequence letter:', option.sequence_letter);
           }
         }
 
         // Store answer in user_answer table
         const answerString = selectedLetters.sort().join(',');
+        console.log('[attemptQuiz] Answer string for storage:', answerString);
+        
         await supabase.from('user_answer').insert({
           attempt_id: attempt.id,
           question_id: answer.questionId,
@@ -558,20 +737,27 @@ export class QuizService {
           .map((opt) => opt.sequence_letter)
           .sort();
 
+        console.log('[attemptQuiz] Correct letters:', correctLetters);
+        console.log('[attemptQuiz] User answer:', answerString);
+        console.log('[attemptQuiz] Expected correct answer:', correctLetters.join(','));
+
         // Full marks only if answer matches exactly
         if (answerString === correctLetters.join(',')) {
           marksObtained += question.marks;
+          console.log('[attemptQuiz] ✅ Correct answer! Added', question.marks, 'marks. Total:', marksObtained);
+        } else {
+          console.log('[attemptQuiz] ❌ Wrong answer. No marks added.');
         }
+      } else {
+        console.log('[attemptQuiz] ⚠️ Question not found for ID:', answer.questionId);
       }
     }
 
-    // Calculate time taken (from creation to now)
-    const now = new Date();
+    // Calculate time taken (from creation to submission)
+    const submissionTime = new Date();
     const startTime = new Date(attempt.created_at);
-    const timeTakenMs = now.getTime() - startTime.getTime();
-    const timeTakenMinutes = Math.floor(timeTakenMs / (1000 * 60));
-    const timeTakenSeconds = Math.floor((timeTakenMs % (1000 * 60)) / 1000);
-    const timeFormatted = `${String(Math.floor(timeTakenMinutes / 60)).padStart(2, '0')}:${String(timeTakenMinutes % 60).padStart(2, '0')}:${String(timeTakenSeconds).padStart(2, '0')}`;
+    const timeTakenMs = submissionTime.getTime() - startTime.getTime();
+    const timeFormatted = this.formatTimeInterval(timeTakenMs);
 
     // Update attempt with completion data
     const { data: updatedAttempt, error: updateError } = await supabase
@@ -579,6 +765,7 @@ export class QuizService {
       .update({
         time_taken: timeFormatted,
         marks: marksObtained,
+        completed: true,
       })
       .eq('id', attempt.id)
       .select()
@@ -604,9 +791,16 @@ export class QuizService {
   async viewResults(quizId: string, userId: string) {
     const supabase = this.supabaseService.getClient();
 
+    // Get attempts with user answers
     const { data: attempts, error } = await supabase
       .from('quiz_attempt')
-      .select('*')
+      .select(`
+        *,
+        user_answer (
+          question_id,
+          answer
+        )
+      `)
       .eq('quiz_id', quizId)
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
@@ -615,7 +809,55 @@ export class QuizService {
       throw new Error(`Failed to fetch results: ${error.message}`);
     }
 
-    return attempts;
+    // Get quiz details to convert sequence letters back to option IDs
+    const quiz = await this.getQuiz(quizId);
+
+    // Transform the data to group answers by attempt
+    const transformedAttempts = (attempts || []).map((attempt: any) => {
+      // Group user answers by question for this attempt
+      const answersByQuestion: { [questionId: string]: string[] } = {};
+      
+      if (attempt.user_answer && Array.isArray(attempt.user_answer)) {
+        attempt.user_answer.forEach((userAnswer: any) => {
+          const questionId = userAnswer.question_id;
+          const answerLetters = userAnswer.answer; // This is sequence letters like 'a,b'
+          
+          if (answerLetters) {
+            // Find the question in quiz data
+            const question = quiz.quiz_questions?.find(q => q.id === questionId);
+            if (question) {
+              // Convert sequence letters back to option IDs
+              const letters = answerLetters.split(',');
+              const selectedOptionIds = letters.map(letter => {
+                const option = question.quiz_options?.find(opt => opt.sequence_letter === letter);
+                return option?.id;
+              }).filter(Boolean); // Remove any undefined values
+              
+              answersByQuestion[questionId] = selectedOptionIds;
+            }
+          }
+        });
+      }
+      
+      // Convert to the format expected by frontend
+      const answers = Object.entries(answersByQuestion).map(([questionId, selectedOptionIds]) => ({
+        questionId,
+        selectedOptionIds
+      }));
+
+      return {
+        id: attempt.id,
+        attemptNumber: attempt.attempt_nummber,
+        marksObtained: attempt.marks || 0,
+        totalMarks: quiz.quiz_questions?.reduce((sum, q) => sum + q.marks, 0) || 0,
+        timeTaken: attempt.time_taken || '00:00:00',
+        completed: attempt.completed,
+        created_at: attempt.created_at,
+        answers,
+      };
+    });
+
+    return transformedAttempts;
   }
 
   async validateUser(userId: string) {
