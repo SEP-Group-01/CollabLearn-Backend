@@ -476,4 +476,104 @@ export class ForumService {
     // You can add is_pinned column to messages table if you want this functionality
     return { success: true };
   }
+
+  async deleteMessage(
+    messageId: string,
+    userId: string,
+  ): Promise<{ success: boolean }> {
+    const supabase = this.supabaseService.getClient();
+
+    // Check if message exists and belongs to user
+    const { data: message, error: messageError } = await supabase
+      .from('messages')
+      .select('id, author_id')
+      .eq('id', messageId)
+      .single();
+
+    if (messageError || !message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    // Check if user is the author or admin
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+
+    const isAuthor = message.author_id === userId;
+    const isAdmin = userProfile?.role === 'admin';
+
+    if (!isAuthor && !isAdmin) {
+      throw new BadRequestException('You can only delete your own messages');
+    }
+
+    // Delete all replies first (from replies table)
+    await supabase
+      .from('replies')
+      .delete()
+      .eq('parent_message_id', messageId);
+
+    // Delete all likes for this message
+    await supabase
+      .from('message_likes')
+      .delete()
+      .eq('message_id', messageId);
+
+    // Delete the message
+    const { error: deleteError } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', messageId);
+
+    if (deleteError) {
+      throw new BadRequestException('Failed to delete message: ' + deleteError.message);
+    }
+
+    return { success: true };
+  }
+
+  async deleteReply(
+    replyId: string,
+    userId: string,
+  ): Promise<{ success: boolean }> {
+    const supabase = this.supabaseService.getClient();
+
+    // Check if reply exists and belongs to user (in replies table)
+    const { data: reply, error: replyError } = await supabase
+      .from('replies')
+      .select('id, user_id')
+      .eq('id', replyId)
+      .single();
+
+    if (replyError || !reply) {
+      throw new NotFoundException('Reply not found');
+    }
+
+    // Check if user is the author or admin
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+
+    const isAuthor = reply.user_id === userId;
+    const isAdmin = userProfile?.role === 'admin';
+
+    if (!isAuthor && !isAdmin) {
+      throw new BadRequestException('You can only delete your own replies');
+    }
+
+    // Delete the reply
+    const { error: deleteError } = await supabase
+      .from('replies')
+      .delete()
+      .eq('id', replyId);
+
+    if (deleteError) {
+      throw new BadRequestException('Failed to delete reply: ' + deleteError.message);
+    }
+
+    return { success: true };
+  }
 }

@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Complete Quiz System Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .test-section {
+        margin: 20px 0;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .result {
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 5px;
+        border-left: 4px solid;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+        border-color: #28a745;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border-color: #dc3545;
+      }
+      .info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        border-color: #17a2b8;
+      }
+      .warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border-color: #ffc107;
+      }
+      button {
+        padding: 12px 24px;
+        margin: 8px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s;
+      }
+      button:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+      .btn-primary {
+        background-color: #007bff;
+        color: white;
+      }
+      .btn-success {
+        background-color: #28a745;
+        color: white;
+      }
+      .btn-warning {
+        background-color: #ffc107;
+        color: #212529;
+      }
+      .btn-danger {
+        background-color: #dc3545;
+        color: white;
+      }
+      .btn-info {
+        background-color: #17a2b8;
+        color: white;
+      }
+      pre {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        font-size: 12px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      input,
+      textarea,
+      select {
+        width: 100%;
+        max-width: 400px;
+        padding: 8px;
+        margin: 5px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      textarea {
+        height: 80px;
+        resize: vertical;
+      }
+      .form-group {
+        margin: 15px 0;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+      }
+      .test-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+      }
+      .progress {
+        width: 100%;
+        height: 6px;
+        background-color: #e9ecef;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .progress-bar {
+        height: 100%;
+        background-color: #007bff;
+        transition: width 0.3s;
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      h3 {
+        color: #495057;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎯 Complete Quiz System Test Suite</h1>
+
+      <!-- Configuration Section -->
+      <div class="test-section">
+        <h3>⚙️ Configuration</h3>
+        <div class="form-group">
+          <label>API Gateway URL:</label>
+          <input type="text" id="apiUrl" value="http://localhost:3000" />
+        </div>
+        <div class="form-group">
+          <label>JWT Token:</label>
+          <textarea
+            id="jwtToken"
+            placeholder="Paste your JWT token here"
+          ></textarea>
+        </div>
+        <div class="form-group">
+          <label>Thread ID:</label>
+          <input
+            type="text"
+            id="threadId"
+            value="thread-123"
+            placeholder="Enter thread ID"
+          />
+        </div>
+        <div class="form-group">
+          <label>User ID (for testing):</label>
+          <input
+            type="text"
+            id="userId"
+            value="user-123"
+            placeholder="Enter user ID"
+          />
+        </div>
+      </div>
+
+      <!-- System Health Check -->
+      <div class="test-section">
+        <h3>🏥 System Health Check</h3>
+        <button class="btn-info" onclick="runHealthChecks()">
+          Run All Health Checks
+        </button>
+        <div id="healthResult"></div>
+      </div>
+
+      <!-- Quiz Management Tests -->
+      <div class="test-section">
+        <h3>📝 Quiz Management</h3>
+        <div class="test-grid">
+          <div>
+            <button class="btn-primary" onclick="testCreateQuiz()">
+              Create Quiz
+            </button>
+            <button class="btn-success" onclick="testListQuizzes()">
+              List Quizzes
+            </button>
+          </div>
+          <div>
+            <button class="btn-warning" onclick="testGetQuiz()">
+              Get Specific Quiz
+            </button>
+            <button class="btn-danger" onclick="testDeleteQuiz()">
+              Delete Quiz
+            </button>
+          </div>
+        </div>
+        <div id="quizManagementResult"></div>
+      </div>
+
+      <!-- Permission Testing -->
+      <div class="test-section">
+        <h3>🔒 Permission & Security Tests</h3>
+        <div class="test-grid">
+          <div>
+            <button class="btn-warning" onclick="testAdminCheck()">
+              Test Admin Check
+            </button>
+            <button class="btn-warning" onclick="testModeratorCheck()">
+              Test Moderator Check
+            </button>
+          </div>
+          <div>
+            <button class="btn-danger" onclick="testUnauthorizedAccess()">
+              Test Unauthorized Access
+            </button>
+            <button class="btn-info" onclick="testTokenValidation()">
+              Test Token Validation
+            </button>
+          </div>
+        </div>
+        <div id="permissionResult"></div>
+      </div>
+
+      <!-- Quiz Taking Tests -->
+      <div class="test-section">
+        <h3>🎮 Quiz Taking Flow</h3>
+        <div class="test-grid">
+          <div>
+            <button class="btn-success" onclick="testStartQuiz()">
+              Start Quiz
+            </button>
+            <button class="btn-primary" onclick="testSubmitAnswer()">
+              Submit Answer
+            </button>
+          </div>
+          <div>
+            <button class="btn-warning" onclick="testGetAttempt()">
+              Get Attempt Status
+            </button>
+            <button class="btn-info" onclick="testCompleteQuiz()">
+              Complete Quiz
+            </button>
+          </div>
+        </div>
+        <div id="quizTakingResult"></div>
+      </div>
+
+      <!-- Database Schema Tests -->
+      <div class="test-section">
+        <h3>🗄️ Database Schema Validation</h3>
+        <button class="btn-info" onclick="testDatabaseSchema()">
+          Validate Database Schema
+        </button>
+        <div id="schemaResult"></div>
+      </div>
+
+      <!-- Performance Tests -->
+      <div class="test-section">
+        <h3>⚡ Performance Tests</h3>
+        <button class="btn-warning" onclick="runPerformanceTests()">
+          Run Performance Tests
+        </button>
+        <div id="performanceResult"></div>
+      </div>
+    </div>
+
+    <script>
+      let currentQuizId = null;
+      let currentAttemptId = null;
+
+      function displayResult(elementId, type, message, data = null) {
+        const element = document.getElementById(elementId);
+        const timestamp = new Date().toLocaleTimeString();
+        element.innerHTML = `
+                <div class="result ${type}">
+                    <strong>[${timestamp}] ${message}</strong>
+                    ${data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : ''}
+                </div>
+            `;
+      }
+
+      function appendResult(elementId, type, message, data = null) {
+        const element = document.getElementById(elementId);
+        const timestamp = new Date().toLocaleTimeString();
+        element.innerHTML += `
+                <div class="result ${type}">
+                    <strong>[${timestamp}] ${message}</strong>
+                    ${data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : ''}
+                </div>
+            `;
+      }
+
+      async function makeRequest(url, options = {}) {
+        const token = document.getElementById('jwtToken').value;
+        const baseUrl = document.getElementById('apiUrl').value;
+
+        const defaultOptions = {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        };
+
+        const response = await fetch(`${baseUrl}${url}`, {
+          ...defaultOptions,
+          ...options,
+          headers: { ...defaultOptions.headers, ...options.headers },
+        });
+
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      }
+
+      // Health Check Tests
+      async function runHealthChecks() {
+        displayResult('healthResult', 'info', 'Running health checks...');
+
+        const tests = [
+          { name: 'API Gateway Health', url: '/health' },
+          { name: 'Auth Service Health', url: '/auth/health' },
+          { name: 'Quiz Service Health', url: '/quizzes/health' },
+        ];
+
+        for (const test of tests) {
+          try {
+            const { response, data } = await makeRequest(test.url);
+            const status = response.ok ? 'success' : 'error';
+            appendResult(
+              'healthResult',
+              status,
+              `${test.name}: ${response.ok ? 'HEALTHY' : 'UNHEALTHY'} (${response.status})`,
+              data,
+            );
+          } catch (error) {
+            appendResult('healthResult', 'error', `${test.name}: FAILED`, {
+              error: error.message,
+            });
+          }
+        }
+      }
+
+      // Quiz Management Tests
+      async function testCreateQuiz() {
+        const threadId = document.getElementById('threadId').value;
+        const quizData = {
+          title: 'Comprehensive Test Quiz',
+          description: 'This quiz tests all functionality',
+          timeAllocated: 30,
+          questions: [
+            {
+              questionText: 'What is 2 + 2?',
+              marks: 5,
+              options: [
+                { text: '3', isCorrect: false },
+                { text: '4', isCorrect: true },
+                { text: '5', isCorrect: false },
+              ],
+            },
+            {
+              questionText: 'What is the capital of France?',
+              marks: 3,
+              options: [
+                { text: 'London', isCorrect: false },
+                { text: 'Paris', isCorrect: true },
+                { text: 'Berlin', isCorrect: false },
+              ],
+            },
+          ],
+        };
+
+        try {
+          displayResult('quizManagementResult', 'info', 'Creating quiz...');
+          const { response, data } = await makeRequest(
+            `/quizzes/thread/${threadId}`,
+            {
+              method: 'POST',
+              body: JSON.stringify(quizData),
+            },
+          );
+
+          if (response.ok && data.quiz) {
+            currentQuizId = data.quiz.id;
+            displayResult(
+              'quizManagementResult',
+              'success',
+              `Quiz created successfully (ID: ${currentQuizId})`,
+              data,
+            );
+          } else {
+            displayResult(
+              'quizManagementResult',
+              'error',
+              `Failed to create quiz (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult(
+            'quizManagementResult',
+            'error',
+            'Network error creating quiz',
+            { error: error.message },
+          );
+        }
+      }
+
+      async function testListQuizzes() {
+        const threadId = document.getElementById('threadId').value;
+
+        try {
+          displayResult('quizManagementResult', 'info', 'Fetching quizzes...');
+          const { response, data } = await makeRequest(
+            `/quizzes/thread/${threadId}`,
+          );
+
+          if (response.ok) {
+            displayResult(
+              'quizManagementResult',
+              'success',
+              `Found ${data.length || 0} quizzes`,
+              data,
+            );
+          } else {
+            displayResult(
+              'quizManagementResult',
+              'error',
+              `Failed to list quizzes (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult(
+            'quizManagementResult',
+            'error',
+            'Network error listing quizzes',
+            { error: error.message },
+          );
+        }
+      }
+
+      async function testGetQuiz() {
+        if (!currentQuizId) {
+          displayResult(
+            'quizManagementResult',
+            'warning',
+            'No quiz ID available. Create a quiz first.',
+          );
+          return;
+        }
+
+        try {
+          displayResult(
+            'quizManagementResult',
+            'info',
+            `Getting quiz ${currentQuizId}...`,
+          );
+          const { response, data } = await makeRequest(
+            `/quizzes/${currentQuizId}`,
+          );
+
+          if (response.ok) {
+            displayResult(
+              'quizManagementResult',
+              'success',
+              'Quiz retrieved successfully',
+              data,
+            );
+          } else {
+            displayResult(
+              'quizManagementResult',
+              'error',
+              `Failed to get quiz (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult(
+            'quizManagementResult',
+            'error',
+            'Network error getting quiz',
+            { error: error.message },
+          );
+        }
+      }
+
+      // Permission Tests
+      async function testAdminCheck() {
+        const threadId = document.getElementById('threadId').value;
+        const userId = document.getElementById('userId').value;
+
+        try {
+          displayResult(
+            'permissionResult',
+            'info',
+            'Testing admin permissions...',
+          );
+          const { response, data } = await makeRequest(
+            '/quizzes/check-admin-or-moderator',
+            {
+              method: 'POST',
+              body: JSON.stringify({ userId, threadId }),
+            },
+          );
+
+          const status = data.success ? 'success' : 'warning';
+          displayResult(
+            'permissionResult',
+            status,
+            `Admin check: ${data.success ? 'AUTHORIZED' : 'NOT AUTHORIZED'}`,
+            data,
+          );
+        } catch (error) {
+          displayResult(
+            'permissionResult',
+            'error',
+            'Network error checking admin status',
+            { error: error.message },
+          );
+        }
+      }
+
+      async function testUnauthorizedAccess() {
+        const threadId = document.getElementById('threadId').value;
+        const originalToken = document.getElementById('jwtToken').value;
+
+        // Temporarily clear token
+        document.getElementById('jwtToken').value = '';
+
+        try {
+          displayResult(
+            'permissionResult',
+            'info',
+            'Testing unauthorized access...',
+          );
+          const { response, data } = await makeRequest(
+            `/quizzes/thread/${threadId}`,
+          );
+
+          if (response.status === 401) {
+            displayResult(
+              'permissionResult',
+              'success',
+              'Unauthorized access properly blocked',
+              { status: response.status, data },
+            );
+          } else {
+            displayResult(
+              'permissionResult',
+              'warning',
+              'Expected 401 but got different response',
+              { status: response.status, data },
+            );
+          }
+        } catch (error) {
+          displayResult(
+            'permissionResult',
+            'error',
+            'Network error testing unauthorized access',
+            { error: error.message },
+          );
+        } finally {
+          // Restore token
+          document.getElementById('jwtToken').value = originalToken;
+        }
+      }
+
+      // Quiz Taking Tests
+      async function testStartQuiz() {
+        if (!currentQuizId) {
+          displayResult(
+            'quizTakingResult',
+            'warning',
+            'No quiz ID available. Create a quiz first.',
+          );
+          return;
+        }
+
+        const userId = document.getElementById('userId').value;
+        const startData = { quizId: currentQuizId, userId };
+
+        try {
+          displayResult('quizTakingResult', 'info', 'Starting quiz...');
+          const { response, data } = await makeRequest('/quizzes/start', {
+            method: 'POST',
+            body: JSON.stringify(startData),
+          });
+
+          if (response.ok && data.attemptId) {
+            currentAttemptId = data.attemptId;
+            displayResult(
+              'quizTakingResult',
+              'success',
+              'Quiz started successfully',
+              data,
+            );
+          } else {
+            displayResult(
+              'quizTakingResult',
+              'error',
+              `Failed to start quiz (${response.status})`,
+              data,
+            );
+          }
+        } catch (error) {
+          displayResult(
+            'quizTakingResult',
+            'error',
+            'Network error starting quiz',
+            { error: error.message },
+          );
+        }
+      }
+
+      // Performance Tests
+      async function runPerformanceTests() {
+        displayResult(
+          'performanceResult',
+          'info',
+          'Running performance tests...',
+        );
+
+        const threadId = document.getElementById('threadId').value;
+        const tests = [];
+        const iterations = 5;
+
+        // Test API response times
+        for (let i = 0; i < iterations; i++) {
+          const start = performance.now();
+          try {
+            await makeRequest(`/quizzes/thread/${threadId}`);
+            tests.push(performance.now() - start);
+          } catch (error) {
+            tests.push(-1); // Error marker
+          }
+        }
+
+        const validTests = tests.filter((t) => t > 0);
+        const avgTime =
+          validTests.reduce((a, b) => a + b, 0) / validTests.length;
+        const maxTime = Math.max(...validTests);
+        const minTime = Math.min(...validTests);
+
+        const results = {
+          totalTests: iterations,
+          successfulTests: validTests.length,
+          averageResponseTime: `${avgTime.toFixed(2)}ms`,
+          minResponseTime: `${minTime.toFixed(2)}ms`,
+          maxResponseTime: `${maxTime.toFixed(2)}ms`,
+          successRate: `${((validTests.length / iterations) * 100).toFixed(1)}%`,
+        };
+
+        const status =
+          validTests.length === iterations && avgTime < 1000
+            ? 'success'
+            : 'warning';
+        displayResult(
+          'performanceResult',
+          status,
+          'Performance test completed',
+          results,
+        );
+      }
+
+      // Schema validation
+      async function testDatabaseSchema() {
+        displayResult('schemaResult', 'info', 'Validating database schema...');
+
+        // This would ideally test actual database schema
+        // For now, we'll test if our API calls work with expected data structures
+        const threadId = document.getElementById('threadId').value;
+
+        try {
+          const { response, data } = await makeRequest(
+            `/quizzes/thread/${threadId}`,
+          );
+
+          if (response.ok && Array.isArray(data)) {
+            const schemaValid = data.every(
+              (quiz) =>
+                quiz.hasOwnProperty('id') &&
+                quiz.hasOwnProperty('title') &&
+                quiz.hasOwnProperty('description'),
+            );
+
+            displayResult(
+              'schemaResult',
+              schemaValid ? 'success' : 'warning',
+              `Schema validation: ${schemaValid ? 'PASSED' : 'ISSUES FOUND'}`,
+              { sampleData: data[0] || 'No data to validate' },
+            );
+          } else {
+            displayResult(
+              'schemaResult',
+              'error',
+              'Could not validate schema - no data returned',
+            );
+          }
+        } catch (error) {
+          displayResult('schemaResult', 'error', 'Schema validation failed', {
+            error: error.message,
+          });
+        }
+      }
+    </script>
+  </body>
+</html>

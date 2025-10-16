@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   Put,
+  Delete,
   HttpException,
   HttpStatus,
   ParseIntPipe,
@@ -105,14 +106,22 @@ export class ForumController {
   }
 
   // Create message
-  @Post('messages')
+  @Post('workspaces/:workspaceId/forum/messages')
   async createMessage(
-    @Body() createMessageDto: CreateMessageDto,
+    @Body() message: { content: string; authorId: string },
+    @Param('workspaceId') workspaceId: string,
   ): Promise<any> {
     try {
+      // Create proper DTO
+      const createMessageDto = {
+        workspaceId,
+        authorId: message.authorId,
+        content: message.content,
+      };
+
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const result = await firstValueFrom(
-        this.forumService.send({ cmd: 'create_message' }, createMessageDto),
+        this.forumService.send({ cmd: 'create-workspace-forum-message' }, createMessageDto),
       );
 
       return this.handleServiceResponse(result, 'Failed to create message');
@@ -201,6 +210,44 @@ export class ForumController {
       return this.handleServiceResponse(result, 'Failed to unpin message');
     } catch (error) {
       this.handleError(error, 'Failed to unpin message');
+    }
+  }
+
+  // Delete message
+  @Delete('workspaces/:workspaceId/messages/:messageId')
+  async deleteMessage(
+    @Param('workspaceId') workspaceId: string,
+    @Param('messageId') messageId: string,
+    @Body() body: { userId: string },
+  ): Promise<any> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const result = await firstValueFrom(
+        this.forumService.send({ cmd: 'delete_message' }, { messageId, userId: body.userId }),
+      );
+
+      return this.handleServiceResponse(result, 'Failed to delete message');
+    } catch (error) {
+      this.handleError(error, 'Failed to delete message');
+    }
+  }
+
+  // Delete reply
+  @Delete('messages/:messageId/replies/:replyId')
+  async deleteReply(
+    @Param('messageId') messageId: string,
+    @Param('replyId') replyId: string,
+    @Body() body: { userId: string },
+  ): Promise<any> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const result = await firstValueFrom(
+        this.forumService.send({ cmd: 'delete_reply' }, { replyId, userId: body.userId }),
+      );
+
+      return this.handleServiceResponse(result, 'Failed to delete reply');
+    } catch (error) {
+      this.handleError(error, 'Failed to delete reply');
     }
   }
 }
