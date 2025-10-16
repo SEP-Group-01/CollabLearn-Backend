@@ -1,0 +1,48 @@
+# Ignore node modules and build artifacts
+node_modules/
+**/node_modules/
+npm-debug.log
+yarn-error.log
+.pnpm-debug.log
+
+# Ignore Git
+.git/
+.gitignore
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore test and coverage
+coverage/
+.nyc_output/
+*.test.ts
+*.spec.ts
+
+# Ignore documentation
+*.md
+MD/
+
+# Ignore Docker files
+**/.dockerignore
+**/Dockerfile
+docker-compose*.yml
+
+# Ignore environment files
+.env*
+!.env.template
+
+# Ignore build artifacts
+dist/
+build/
+*.log
+
+# Ignore macOS files
+.DS_Store
+
+# Ignore uploads
+uploads/
+**/uploads/

@@ -13,8 +13,7 @@ CREATE TABLE users (
     reset_password_token VARCHAR(255),
     reset_password_expires TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    image_url TEXT
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Workspaces table
@@ -123,7 +122,6 @@ CREATE TABLE thread_resources (
   resource_type VARCHAR(20) CHECK (resource_type IN ('document', 'video', 'link')),
   title VARCHAR(255) NOT NULL,
   description TEXT,
-  estimated_completion_time integer DEFAULT 0, -- in minutes
   
   -- Firebase Storage fields (the key integration points)
   firebase_path VARCHAR(500),     -- Storage path in Firebase
@@ -146,14 +144,15 @@ CREATE TABLE resource_reviews (
   attachment_url VARCHAR(1024)
 );
 
--- Table to track user progress on resources
+-- Table to track user progress on resources -- MEHEMA EKAK ONEDA????
 CREATE TABLE IF NOT EXISTS user_progress (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    resource_id UUID NOT NULL REFERENCES thread_resources(id) ON DELETE CASCADE,
+    resource_id UUID NOT NULL REFERENCES study_resources(id) ON DELETE CASCADE,
     completion_status VARCHAR(50) NOT NULL DEFAULT 'not_started' 
         CHECK (completion_status IN ('not_started', 'in_progress', 'completed', 'needs_revision')),
     progress_percentage DECIMAL(5,2) DEFAULT 0.00 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+    actual_time_spent INTEGER DEFAULT 0, -- in minutes
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -167,6 +166,7 @@ CREATE TABLE IF NOT EXISTS study_slots (
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     is_free BOOLEAN DEFAULT true,
+    recurring BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CHECK (end_time > start_time)
 );
@@ -177,27 +177,30 @@ CREATE TABLE IF NOT EXISTS study_plans (
     user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     input_data JSONB NOT NULL, -- Original request data
     result JSONB, -- Generated plan result
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'error')),
     total_weeks INTEGER DEFAULT 0,
     coverage_percentage DECIMAL(5,2) DEFAULT 0.00,
+    workspaces_included TEXT[], -- Array of workspace IDs #DN OKKOTMA EKA PLAN EKAK DA HADANNE
+    error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Table to store scheduled tasks from generated plans
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
-
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     plan_id  UUID NOT NULL REFERENCES study_plans(id) ON DELETE CASCADE,
     user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    resource_id  UUID NOT NULL REFERENCES thread_resources(id) ON DELETE CASCADE, --MEKATA FK EKK VIDIYT SLOT EKA ENNA ONE NEDA
-    thread_id UUID REFERENCES threads(id),
-    sequence_in_resource INT DEFAULT 1,
+    resource_id  UUID NOT NULL REFERENCES study_resources(id) ON DELETE CASCADE, --MEKATA FK EKK VIDIYT SLOT EKA ENNA ONE NEDA
+    workspace_id VARCHAR(255) NOT NULL,
+    thread_id VARCHAR(255) NOT NULL,
     week_number INTEGER NOT NULL,
     day_of_week VARCHAR(20) NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     allocated_time_minutes INTEGER NOT NULL,
     completed BOOLEAN DEFAULT false,
+    actual_completion_time INTEGER, -- actual time spent in minutes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (plan_id) REFERENCES study_plans(id) ON DELETE CASCADE,
     FOREIGN KEY (resource_id) REFERENCES study_resources(id) ON DELETE CASCADE
@@ -247,9 +250,10 @@ CREATE TABLE answer_option (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   question_id UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
   answer_sequence_letter VARCHAR(1) NOT NULL CHECK (answer_sequence_letter IN ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j')),
-  answer VARCHAR(500),
+  answer VARCHAR(50),
   image_url VARCHAR(1024),
-  is_correct BOOLEAN NOT NULL DEFAULT FALSE
+  is_correct BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE quiz_attempt (
@@ -260,7 +264,6 @@ CREATE TABLE quiz_attempt (
   time_taken TIME,
   marks FLOAT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  completed BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE user_answer (
@@ -274,70 +277,3 @@ CREATE TABLE user_answer (
 );
 
 
-
--- Create replies table for threaded conversations
--- This migration creates a dedicated replies table to handle message replies properly
-
-CREATE TABLE IF NOT EXISTS replies (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    parent_message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_replies_parent_message ON replies (parent_message_id);
-CREATE INDEX IF NOT EXISTS idx_replies_user ON replies (user_id);
-CREATE INDEX IF NOT EXISTS idx_replies_workspace ON replies (workspace_id);
-CREATE INDEX IF NOT EXISTS idx_replies_created_at ON replies (created_at);
-
--- Add trigger to update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_replies_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER replies_updated_at
-    BEFORE UPDATE ON replies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_replies_updated_at();
-
--- Add reply_count column to messages table to track number of replies
-ALTER TABLE messages 
-ADD COLUMN IF NOT EXISTS reply_count INTEGER DEFAULT 0;
-
--- Create function to update reply count when replies are added/removed
-CREATE OR REPLACE FUNCTION update_message_reply_count()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        UPDATE messages 
-        SET reply_count = reply_count + 1 
-        WHERE id = NEW.parent_message_id;
-        RETURN NEW;
-    ELSIF TG_OP = 'DELETE' THEN
-        UPDATE messages 
-        SET reply_count = reply_count - 1 
-        WHERE id = OLD.parent_message_id;
-        RETURN OLD;
-    END IF;
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
--- Create triggers to automatically update reply count
-CREATE TRIGGER replies_insert_update_count
-    AFTER INSERT ON replies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_message_reply_count();
-
-CREATE TRIGGER replies_delete_update_count
-    AFTER DELETE ON replies
-    FOR EACH ROW
-    EXECUTE FUNCTION update_message_reply_count();

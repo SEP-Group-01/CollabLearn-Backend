@@ -32,8 +32,24 @@ async function bootstrap() {
 
   // Enable CORS for frontend
   app.enableCors({
-    origin: configService.get('FRONTEND_URL'),
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      configService.get('FRONTEND_URL'),
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Requested-With',
+      'Access-Control-Allow-Headers',
+      'Origin',
+    ],
+    exposedHeaders: ['*'],
+    preflightContinue: false,
+    optionsSuccessStatus: 200,
   });
 
   // --- 1️⃣ TCP for NestJS microservices ---ok
@@ -56,8 +72,10 @@ async function bootstrap() {
     },
   });
 
-  // Set global prefix for all REST endpoints
-  app.setGlobalPrefix('api');
+  // Set global prefix for all REST endpoints except health
+  app.setGlobalPrefix('api', {
+    exclude: ['health'],
+  });
 
   // WebSocket Adapter - Using custom Socket.IO adapter for better namespace support
   app.useWebSocketAdapter(new CustomSocketIOAdapter(app));

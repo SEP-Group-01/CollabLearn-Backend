@@ -6,16 +6,21 @@ import { ResourceController } from './controllers/resource.controller';
 import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
 import { ForumController } from './controllers/forum.controller';
+import { HealthController } from './controllers/health.controller';
 import { KafkaService } from './services/kafka.service';
 import { RedisBridgeService } from './services/redis-bridge.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { DocumentEditorController } from './controllers/document-editor-enhanced.controller';
-import { QuizController } from './controllers/quiz.controller';
 import { StudyPlanController } from './controllers/study-plan.controller';
+import {
+  QuizController,
+  ThreadQuizController,
+} from './controllers/quiz.controller';
 import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 import { ForumGateway } from './gateways/forum.gateway';
 import { QuizGateway } from './gateways/quiz.gateway';
+import { StudyPlanService } from './services/study-plan.service';
 
 @Module({
   imports: [
@@ -98,6 +103,7 @@ import { QuizGateway } from './gateways/quiz.gateway';
     ]),
   ],
   controllers: [
+    HealthController,
     AuthController,
     WorkspacesController,
     ResourceController,
@@ -106,13 +112,16 @@ import { QuizGateway } from './gateways/quiz.gateway';
     DocumentEditorController,
     ForumController,
     DocumentEditorController,
+    ForumController,
     QuizController,
+    ThreadQuizController,
     KafkaReplyController,
     StudyPlanController,
   ],
   providers: [
     KafkaService,
     RedisBridgeService,
+    StudyPlanService,
     DocumentEditorGateway,
     ForumGateway,
     QuizGateway,
