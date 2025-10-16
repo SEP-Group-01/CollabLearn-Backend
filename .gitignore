@@ -1,3 +1,12 @@
+.venv/
+env/
+studyplanenv/
+
+# Firebase service account (SECURITY: Never commit these!)
+config/firebase/
+*.json
+service-account*.json
+
 # compiled output
 /dist
 /node_modules

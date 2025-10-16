@@ -55,6 +55,32 @@ export class AuthController {
     return this.authService.validateUser(data.userId);
   }
 
+  @MessagePattern({ cmd: 'validate_token' })
+  async validateToken(@Payload() data: { token: string }) {
+    return this.authService.validateToken(data.token);
+  }
+
+  @MessagePattern({ cmd: 'refresh_token' })
+  async refreshToken(@Payload() data: { refresh_token: string }) {
+    return this.authService.refreshToken(data.refresh_token);
+  }
+
+  @MessagePattern({ cmd: 'get_user_details' })
+  async getUserDetails(@Payload() data: { token: string }) {
+    return this.authService.getUserDetails(data.token);
+  }
+
+  @MessagePattern({ cmd: 'edit_user' })
+  async editUser(@Payload() data: { 
+    token: string; 
+    first_name?: string; 
+    last_name?: string; 
+    image_file?: string;
+    remove_image?: boolean;
+  }) {
+    return this.authService.editUser(data);
+  }
+
   @Get()
   getHello(): string {
     return this.authService.getHello();

@@ -9,6 +9,7 @@ import { EmailService } from './email.service';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { SupabaseService } from './supabase.service';
+import { FirebaseStorageService } from './services/firebase-storage.service';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SupabaseService } from './supabase.service';
     GoogleStrategy,
     JwtStrategy,
     SupabaseService,
+    FirebaseStorageService,
   ],
 })
 export class AuthModule {}

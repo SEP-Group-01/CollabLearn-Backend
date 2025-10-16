@@ -14,10 +14,7 @@
       "sourceRoot": "apps/api-gateway/src",
       "compilerOptions": {
         "tsConfigPath": "apps/api-gateway/tsconfig.app.json",
-        "assets": [
-          "**/*.!(ts)",
-          ".env"
-        ],
+        "assets": ["**/*.!(ts)", ".env"],
         "watchAssets": true,
         "webpack": false
       }
@@ -29,9 +26,7 @@
       "sourceRoot": "apps/auth-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/auth-service/tsconfig.app.json",
-        "assets": [
-          ".env"
-        ],
+        "assets": [".env"],
         "watchAssets": true
       }
     },
@@ -42,9 +37,7 @@
       "sourceRoot": "apps/document-editor-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/document-editor-service/tsconfig.app.json",
-        "assets": [
-          ".env"
-        ],
+        "assets": [".env"],
         "watchAssets": true
       }
     },
@@ -55,9 +48,7 @@
       "sourceRoot": "apps/forum-and-notification-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/forum-and-notification-service/tsconfig.app.json",
-        "assets": [
-          ".env"
-        ],
+        "assets": [".env"],
         "watchAssets": true
       }
     },
@@ -68,9 +59,7 @@
       "sourceRoot": "apps/quiz-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/quiz-service/tsconfig.app.json",
-        "assets": [
-          ".env"
-        ],
+        "assets": [".env"],
         "watchAssets": true
       }
     },
@@ -81,6 +70,17 @@
       "sourceRoot": "apps/workspaces-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/workspaces-service/tsconfig.app.json"
+      }
+    },
+    "resource-service": {
+      "type": "application",
+      "root": "apps/resource-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/resource-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/resource-service/tsconfig.app.json",
+        "assets": [".env"],
+        "watchAssets": true
       }
     }
   }

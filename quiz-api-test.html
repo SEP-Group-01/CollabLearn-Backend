@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quiz Service API Testing</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .test-section {
+        background: white;
+        margin: 20px 0;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .test-button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        margin: 5px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .test-button:hover {
+        background: #0056b3;
+      }
+      .test-button:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+      }
+      .success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+      .response {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 4px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .input-group {
+        margin: 10px 0;
+      }
+      .input-group label {
+        display: inline-block;
+        width: 150px;
+        font-weight: bold;
+      }
+      .input-group input,
+      .input-group textarea {
+        width: 300px;
+        padding: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .input-group textarea {
+        height: 100px;
+        resize: vertical;
+      }
+      .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+      }
+      .status-success {
+        background: #28a745;
+      }
+      .status-error {
+        background: #dc3545;
+      }
+      .status-pending {
+        background: #ffc107;
+      }
+      .status-neutral {
+        background: #6c757d;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Quiz Service API Testing Tool</h1>
+
+    <!-- Configuration Section -->
+    <div class="test-section">
+      <h2>Configuration</h2>
+      <div class="input-group">
+        <label>API Base URL:</label>
+        <input type="text" id="apiBaseUrl" value="http://localhost:3000/api" />
+      </div>
+      <div class="input-group">
+        <label>Authorization Token:</label>
+        <input
+          type="text"
+          id="authToken"
+          placeholder="Bearer your-jwt-token-here"
+        />
+      </div>
+      <div class="input-group">
+        <label>Thread ID:</label>
+        <input type="text" id="threadId" placeholder="uuid-of-thread" />
+      </div>
+      <div class="input-group">
+        <label>User ID:</label>
+        <input type="text" id="userId" placeholder="uuid-of-user" />
+      </div>
+    </div>
+
+    <!-- Health Check -->
+    <div class="test-section">
+      <h2>
+        <span id="health-status" class="status-indicator status-neutral"></span
+        >Health Check
+      </h2>
+      <button class="test-button" onclick="testHealthCheck()">
+        Test Health Check
+      </button>
+      <div id="health-response"></div>
+    </div>
+
+    <!-- Quiz Management -->
+    <div class="test-section">
+      <h2>
+        <span
+          id="quiz-management-status"
+          class="status-indicator status-neutral"
+        ></span
+        >Quiz Management
+      </h2>
+
+      <h3>Create Quiz</h3>
+      <div class="input-group">
+        <label>Quiz Title:</label>
+        <input type="text" id="quizTitle" value="Test Quiz" />
+      </div>
+      <div class="input-group">
+        <label>Quiz Description:</label>
+        <textarea id="quizDescription">
+This is a test quiz created from the API testing tool.</textarea
+        >
+      </div>
+      <div class="input-group">
+        <label>Time Allocated (min):</label>
+        <input type="number" id="timeAllocated" value="30" />
+      </div>
+      <button class="test-button" onclick="testCreateQuiz()">
+        Create Test Quiz
+      </button>
+      <div id="create-quiz-response"></div>
+
+      <h3>List Quizzes</h3>
+      <button class="test-button" onclick="testListQuizzes()">
+        List All Quizzes
+      </button>
+      <button class="test-button" onclick="testListQuizzesByThread()">
+        List Quizzes by Thread
+      </button>
+      <div id="list-quizzes-response"></div>
+
+      <h3>Get Quiz by ID</h3>
+      <div class="input-group">
+        <label>Quiz ID:</label>
+        <input type="text" id="quizId" placeholder="quiz-uuid" />
+      </div>
+      <button class="test-button" onclick="testGetQuiz()">
+        Get Quiz Details
+      </button>
+      <div id="get-quiz-response"></div>
+    </div>
+
+    <!-- Quiz Taking -->
+    <div class="test-section">
+      <h2>
+        <span
+          id="quiz-taking-status"
+          class="status-indicator status-neutral"
+        ></span
+        >Quiz Taking
+      </h2>
+
+      <h3>Start Quiz</h3>
+      <button class="test-button" onclick="testStartQuiz()">Start Quiz</button>
+      <div id="start-quiz-response"></div>
+
+      <h3>Get Active Attempt</h3>
+      <button class="test-button" onclick="testGetActiveAttempt()">
+        Get Active Attempt
+      </button>
+      <div id="active-attempt-response"></div>
+
+      <h3>Submit Quiz Attempt</h3>
+      <div class="input-group">
+        <label>Attempt ID:</label>
+        <input type="text" id="attemptId" placeholder="attempt-uuid" />
+      </div>
+      <button class="test-button" onclick="testSubmitQuiz()">
+        Submit Quiz (Demo Answers)
+      </button>
+      <div id="submit-quiz-response"></div>
+
+      <h3>View Results</h3>
+      <button class="test-button" onclick="testViewMyResults()">
+        View My Results
+      </button>
+      <button class="test-button" onclick="testViewAllResults()">
+        View All Results (Admin)
+      </button>
+      <div id="view-results-response"></div>
+    </div>
+
+    <!-- Test Results Summary -->
+    <div class="test-section">
+      <h2>Test Results Summary</h2>
+      <div id="test-summary">
+        <p>Run tests to see results summary here.</p>
+      </div>
+    </div>
+
+    <script>
+      let testResults = {
+        health: null,
+        createQuiz: null,
+        listQuizzes: null,
+        getQuiz: null,
+        startQuiz: null,
+        getActiveAttempt: null,
+        submitQuiz: null,
+        viewResults: null,
+      };
+
+      let createdQuizId = null;
+      let activeAttemptId = null;
+
+      function updateStatusIndicator(elementId, status) {
+        const indicator = document.getElementById(elementId);
+        indicator.className = `status-indicator status-${status}`;
+      }
+
+      function displayResponse(elementId, data, isError = false) {
+        const element = document.getElementById(elementId);
+        const className = isError ? 'error' : 'success';
+        element.innerHTML = `
+                <div class="${className}">
+                    <strong>${isError ? 'Error' : 'Success'}:</strong>
+                </div>
+                <div class="response">${JSON.stringify(data, null, 2)}</div>
+            `;
+      }
+
+      function getHeaders() {
+        const token = document.getElementById('authToken').value;
+        return {
+          'Content-Type': 'application/json',
+          Authorization: token || 'Bearer test-token',
+        };
+      }
+
+      function getApiUrl(endpoint) {
+        const baseUrl = document.getElementById('apiBaseUrl').value;
+        return `${baseUrl}${endpoint}`;
+      }
+
+      async function makeRequest(url, options = {}) {
+        try {
+          console.log(`Making request to: ${url}`, options);
+          const response = await fetch(url, {
+            headers: getHeaders(),
+            ...options,
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              `HTTP ${response.status}: ${data.message || 'Request failed'}`,
+            );
+          }
+
+          return { success: true, data };
+        } catch (error) {
+          console.error('Request failed:', error);
+          return { success: false, error: error.message };
+        }
+      }
+
+      async function testHealthCheck() {
+        updateStatusIndicator('health-status', 'pending');
+        const result = await makeRequest(getApiUrl('/quizzes'));
+
+        if (result.success) {
+          testResults.health = true;
+          updateStatusIndicator('health-status', 'success');
+          displayResponse('health-response', result.data);
+        } else {
+          testResults.health = false;
+          updateStatusIndicator('health-status', 'error');
+          displayResponse('health-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testCreateQuiz() {
+        const threadId = document.getElementById('threadId').value;
+        if (!threadId) {
+          alert('Please enter a Thread ID first!');
+          return;
+        }
+
+        const quizData = {
+          title: document.getElementById('quizTitle').value,
+          description: document.getElementById('quizDescription').value,
+          timeAllocated: parseInt(
+            document.getElementById('timeAllocated').value,
+          ),
+          questions: [
+            {
+              questionText: 'What is 2 + 2?',
+              marks: 5,
+              options: [
+                { text: '3', isCorrect: false },
+                { text: '4', isCorrect: true },
+                { text: '5', isCorrect: false },
+                { text: '6', isCorrect: false },
+              ],
+            },
+            {
+              questionText: 'What is the capital of France?',
+              marks: 5,
+              options: [
+                { text: 'London', isCorrect: false },
+                { text: 'Berlin', isCorrect: false },
+                { text: 'Paris', isCorrect: true },
+                { text: 'Madrid', isCorrect: false },
+              ],
+            },
+          ],
+          tags: ['test', 'demo'],
+          resourceTags: ['api-test'],
+        };
+
+        const result = await makeRequest(
+          getApiUrl(`/threads/${threadId}/quizzes/create`),
+          {
+            method: 'POST',
+            body: JSON.stringify(quizData),
+          },
+        );
+
+        if (result.success) {
+          testResults.createQuiz = true;
+          createdQuizId = result.data.quizId;
+          document.getElementById('quizId').value = createdQuizId;
+          displayResponse('create-quiz-response', result.data);
+        } else {
+          testResults.createQuiz = false;
+          displayResponse('create-quiz-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testListQuizzes() {
+        const result = await makeRequest(getApiUrl('/quizzes'));
+
+        if (result.success) {
+          testResults.listQuizzes = true;
+          displayResponse('list-quizzes-response', result.data);
+        } else {
+          testResults.listQuizzes = false;
+          displayResponse('list-quizzes-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testListQuizzesByThread() {
+        const threadId = document.getElementById('threadId').value;
+        if (!threadId) {
+          alert('Please enter a Thread ID first!');
+          return;
+        }
+
+        const result = await makeRequest(
+          getApiUrl(`/threads/${threadId}/quizzes`),
+        );
+
+        if (result.success) {
+          displayResponse('list-quizzes-response', result.data);
+        } else {
+          displayResponse('list-quizzes-response', result.error, true);
+        }
+      }
+
+      async function testGetQuiz() {
+        const quizId = document.getElementById('quizId').value;
+        if (!quizId) {
+          alert('Please enter a Quiz ID first!');
+          return;
+        }
+
+        const result = await makeRequest(getApiUrl(`/quizzes/${quizId}`));
+
+        if (result.success) {
+          testResults.getQuiz = true;
+          displayResponse('get-quiz-response', result.data);
+        } else {
+          testResults.getQuiz = false;
+          displayResponse('get-quiz-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testStartQuiz() {
+        const quizId = document.getElementById('quizId').value;
+        if (!quizId) {
+          alert('Please enter a Quiz ID first!');
+          return;
+        }
+
+        const result = await makeRequest(
+          getApiUrl(`/quizzes/${quizId}/start`),
+          {
+            method: 'POST',
+            body: JSON.stringify({ workspaceId: 'test-workspace' }),
+          },
+        );
+
+        if (result.success) {
+          testResults.startQuiz = true;
+          activeAttemptId = result.data.attemptId;
+          document.getElementById('attemptId').value = activeAttemptId;
+          displayResponse('start-quiz-response', result.data);
+        } else {
+          testResults.startQuiz = false;
+          displayResponse('start-quiz-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testGetActiveAttempt() {
+        const quizId = document.getElementById('quizId').value;
+        if (!quizId) {
+          alert('Please enter a Quiz ID first!');
+          return;
+        }
+
+        const result = await makeRequest(
+          getApiUrl(`/quizzes/${quizId}/active-attempt`),
+        );
+
+        if (result.success) {
+          testResults.getActiveAttempt = true;
+          displayResponse('active-attempt-response', result.data);
+        } else {
+          testResults.getActiveAttempt = false;
+          displayResponse('active-attempt-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testSubmitQuiz() {
+        const attemptId = document.getElementById('attemptId').value;
+        const quizId = document.getElementById('quizId').value;
+
+        if (!attemptId || !quizId) {
+          alert('Please start a quiz first to get an attempt ID!');
+          return;
+        }
+
+        // Demo answers - assuming we know the question IDs
+        const answers = [
+          {
+            questionId: 'question-1-id', // This would need to be actual question ID
+            selectedOptionIds: ['option-2-id'], // This would need to be actual option ID
+          },
+        ];
+
+        const result = await makeRequest(
+          getApiUrl(`/quizzes/${quizId}/attempts`),
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              attemptId: attemptId,
+              answers: answers,
+            }),
+          },
+        );
+
+        if (result.success) {
+          testResults.submitQuiz = true;
+          displayResponse('submit-quiz-response', result.data);
+        } else {
+          testResults.submitQuiz = false;
+          displayResponse('submit-quiz-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testViewMyResults() {
+        const quizId = document.getElementById('quizId').value;
+        if (!quizId) {
+          alert('Please enter a Quiz ID first!');
+          return;
+        }
+
+        const result = await makeRequest(
+          getApiUrl(`/quizzes/${quizId}/attempts/me`),
+        );
+
+        if (result.success) {
+          testResults.viewResults = true;
+          displayResponse('view-results-response', result.data);
+        } else {
+          testResults.viewResults = false;
+          displayResponse('view-results-response', result.error, true);
+        }
+        updateTestSummary();
+      }
+
+      async function testViewAllResults() {
+        const quizId = document.getElementById('quizId').value;
+        const userId = document.getElementById('userId').value;
+
+        if (!quizId || !userId) {
+          alert('Please enter both Quiz ID and User ID!');
+          return;
+        }
+
+        const result = await makeRequest(
+          getApiUrl(`/quizzes/${quizId}/attempts?userId=${userId}`),
+        );
+
+        if (result.success) {
+          displayResponse('view-results-response', result.data);
+        } else {
+          displayResponse('view-results-response', result.error, true);
+        }
+      }
+
+      function updateTestSummary() {
+        const total = Object.keys(testResults).length;
+        const passed = Object.values(testResults).filter(
+          (r) => r === true,
+        ).length;
+        const failed = Object.values(testResults).filter(
+          (r) => r === false,
+        ).length;
+        const pending = total - passed - failed;
+
+        document.getElementById('test-summary').innerHTML = `
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <div>
+                        <strong>Test Summary:</strong>
+                    </div>
+                    <div style="color: #28a745;">
+                        <span class="status-indicator status-success"></span>
+                        Passed: ${passed}
+                    </div>
+                    <div style="color: #dc3545;">
+                        <span class="status-indicator status-error"></span>
+                        Failed: ${failed}
+                    </div>
+                    <div style="color: #6c757d;">
+                        <span class="status-indicator status-neutral"></span>
+                        Not Run: ${pending}
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <strong>Results:</strong> ${JSON.stringify(testResults, null, 2)}
+                </div>
+            `;
+      }
+
+      // Initialize
+      updateTestSummary();
+    </script>
+  </body>
+</html>

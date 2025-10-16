@@ -4,7 +4,7 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
 import { ForumAndNotificationServiceModule } from './forum-and-notification-service.module';
 
-const logger = new Logger('ForumService');
+const logger = new Logger('ForumAndNotificationService');
 
 async function bootstrap() {
   const app = await NestFactory.create(ForumAndNotificationServiceModule);
@@ -25,7 +25,7 @@ async function bootstrap() {
     }),
   );
 
-  // --- 1️⃣ TCP Microservice for API Gateway communication (Optional) ---
+  // --- TCP Microservice for API Gateway communication ---
   const enableTcp = configService.get('ENABLE_TCP') !== 'false';
   if (enableTcp) {
     try {
@@ -44,30 +44,6 @@ async function bootstrap() {
     }
   }
 
-  // --- 2️⃣ Kafka for event publishing (Optional) ---
-  const enableKafka = configService.get('ENABLE_KAFKA') !== 'false';
-  if (enableKafka) {
-    try {
-      app.connectMicroservice<MicroserviceOptions>({
-        transport: Transport.KAFKA,
-        options: {
-          client: {
-            clientId: 'forum-service',
-            brokers: [configService.get('KAFKA_BROKERS') || 'localhost:9092'],
-          },
-          consumer: {
-            groupId: 'forum-service-consumer',
-          },
-        },
-      });
-      logger.log('📩 Kafka microservice configured');
-    } catch {
-      logger.warn(
-        '⚠️ Kafka microservice configuration failed, continuing without Kafka',
-      );
-    }
-  }
-
   // Start microservices (only if configured)
   try {
     await app.startAllMicroservices();
@@ -82,7 +58,7 @@ async function bootstrap() {
   }
 
   // Start HTTP server (for WebSocket connections and health checks)
-  const port = parseInt(configService.get('FORUM_SERVICE_PORT') || '3003');
+  const port = parseInt(configService.get('FORUM_SERVICE_PORT') || '3004');
   await app.listen(port);
 
   logger.log('✅ Forum and Notification Service is running');
@@ -94,11 +70,7 @@ async function bootstrap() {
     );
   }
 
-  if (enableKafka) {
-    logger.log('📩 Kafka microservice configured for event publishing');
-  } else {
-    logger.log('📩 Kafka disabled - running in standalone mode');
-  }
+  logger.log('📩 Notifications will be handled within the forum service');
 }
 bootstrap().catch((error) => {
   console.error('Failed to start the application:', error);

@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for NestJS Auth Service
 
 # Stage 1: Dependencies and build
-FROM node:18-alpine AS builder
+FROM node:20-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -21,7 +21,7 @@ RUN npm ci
 RUN npm run build auth-service
 
 # Stage 2: Production runtime
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 # Create app directory
 WORKDIR /app

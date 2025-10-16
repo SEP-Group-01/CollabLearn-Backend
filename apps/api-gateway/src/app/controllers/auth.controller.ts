@@ -7,6 +7,7 @@ import {
   Body,
   HttpException,
   HttpStatus,
+  Headers,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
@@ -38,6 +39,7 @@ export class AuthController {
     body: {
       email: string; //DTOs are in the auth-service
       password: string;
+      remember_me?: boolean;
     },
   ) {
     console.log('Login attempt:', body);
@@ -133,6 +135,125 @@ export class AuthController {
           { cmd: 'reset_password' },
           { token, newPassword },
         ),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('validate-token')
+  async validateToken(
+    @Headers('authorization') authHeader: string,
+    @Body() body?: { token?: string },
+  ) {
+    let token: string;
+
+    // Extract token from Authorization header or body
+    if (authHeader) {
+      // Remove 'Bearer ' prefix if present
+      token = authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : authHeader;
+    } else if (body?.token) {
+      token = body.token;
+    } else {
+      throw new HttpException(
+        'Token is required in Authorization header or request body',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Token validation attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'validate_token' }, { token }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.UNAUTHORIZED,
+      );
+    }
+  }
+
+  @Post('refresh-token')
+  async refreshToken(@Body() body: { refresh_token: string }) {
+    if (!body.refresh_token) {
+      throw new HttpException(
+        'Refresh token is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Token refresh attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'refresh_token' }, { refresh_token: body.refresh_token }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.UNAUTHORIZED,
+      );
+    }
+  }
+
+  @Get('user')
+  async getUser(@Headers('authorization') authHeader: string) {
+    let token: string;
+
+    // Extract token from Authorization header
+    if (authHeader) {
+      // Remove 'Bearer ' prefix if present
+      token = authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : authHeader;
+    } else {
+      throw new HttpException(
+        'Authorization header is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Get user attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'get_user_details' }, { token }),
+      );
+    } catch (error) {
+      throw new HttpException(
+        error.message,
+        error.status || HttpStatus.UNAUTHORIZED,
+      );
+    }
+  }
+
+  @Post('edit-user')
+  async editUser(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { first_name?: string; last_name?: string; image_file?: string; remove_image?: boolean }
+  ) {
+    let token: string;
+
+    // Extract token from Authorization header
+    if (authHeader) {
+      token = authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : authHeader;
+    } else {
+      throw new HttpException(
+        'Authorization header is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    console.log('Edit user attempt');
+    try {
+      return await firstValueFrom(
+        this.authService.send({ cmd: 'edit_user' }, { token, ...body }),
       );
     } catch (error) {
       throw new HttpException(

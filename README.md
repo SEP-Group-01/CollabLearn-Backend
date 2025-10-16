@@ -59,16 +59,44 @@ $ npm run test:cov
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### AWS EC2 Deployment (Production)
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+This project includes comprehensive deployment scripts and guides for deploying to AWS EC2 with Docker Compose.
+
+**📖 See [`deploy/DEPLOYMENT_GUIDE.md`](./deploy/DEPLOYMENT_GUIDE.md) for complete instructions**
+
+**Quick Overview:**
+
+- **Platform**: AWS EC2 (Ubuntu 22.04 LTS)
+- **Instance Type**: t3.small (2 vCPU, 2GB RAM) - ~$15/month
+- **Container Registry**: Amazon ECR
+- **Orchestration**: Docker Compose
+- **Services**: Kafka, Zookeeper, Redis, 5 NestJS services, 2 Python services
+
+**Quick Start:**
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# 1. Build and push images (local machine - Windows)
+.\deploy\build-and-push-ecr.ps1 -Region us-east-1
+
+# 2. On EC2, clone and configure
+git clone https://github.com/SEP-Group-01/CollabLearn-Backend.git
+cd CollabLearn-Backend
+cp deploy/.env.template .env
+nano .env  # Fill in your values
+
+# 3. Deploy
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export AWS_REGION=us-east-1
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+**Additional Resources:**
+
+- [`deploy/QUICK_REFERENCE.md`](./deploy/QUICK_REFERENCE.md) - Command reference card
+- [`deploy/README.md`](./deploy/README.md) - Deployment scripts overview
+- [`.github/workflows/deploy-ecr.yml`](./.github/workflows/deploy-ecr.yml) - CI/CD automation
 
 ## Resources
 

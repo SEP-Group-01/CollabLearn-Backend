@@ -1,0 +1,34 @@
+[Unit]
+Description=CollabLearn Backend Docker Compose Application
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/CollabLearn-Backend
+User=ubuntu
+Group=ubuntu
+
+# Set environment variables for docker compose
+Environment="AWS_ACCOUNT_ID=YOUR_AWS_ACCOUNT_ID"
+Environment="AWS_REGION=us-east-1"
+
+# Start all services
+ExecStartPre=/usr/bin/docker compose -f docker-compose.prod.yml pull --quiet
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d
+
+# Stop all services
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+# Security
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

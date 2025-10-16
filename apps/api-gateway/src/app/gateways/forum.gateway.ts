@@ -198,28 +198,28 @@ export class ForumGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('send-message')
   async handleSendMessage(
-    @MessageBody() data: CreateMessageData,
+    @MessageBody() data: CreateMessageData & { workspaceId: string },
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      this.logger.log(`Creating message for group ${data.groupId} from user ${data.userId}`);
+      this.logger.log(`Creating message for workspace ${data.workspaceId} from user ${data.userId}`);
       
       // Forward to forum service via TCP
       const result = await firstValueFrom(
-        this.forumService.send({ cmd: 'create_message' }, {
-          groupId: data.groupId,
+        this.forumService.send({ cmd: 'create-workspace-forum-message' }, {
+          workspaceId: data.workspaceId,
           authorId: data.userId,
           content: data.content,
         })
       );
 
       if (result.success) {
-        const groupId = data.groupId.toString();
+        const roomId = data.workspaceId;
         
-        // Broadcast new message to all clients in the group
-        this.broadcastToGroup(groupId, 'new-message', {
+        // Broadcast new message to all clients in the workspace
+        this.broadcastToGroup(roomId, 'new-message', {
           message: result.data,
-          groupId: data.groupId,
+          workspaceId: data.workspaceId,
         });
 
         // Send confirmation to sender
