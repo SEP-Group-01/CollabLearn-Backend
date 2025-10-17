@@ -8,9 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Kafka Configuration
-# NOTE: Use 'localhost:9093' when running locally (not in Docker)
-# Change to 'kafka:9092' when running in Docker container
-KAFKA_BROKER_URL = 'localhost:9093'  # TODO: Change to 'kafka:9092' after dockerizing
+# Use environment variable to support both local and Docker environments
+KAFKA_BROKER_URL = os.getenv('KAFKA_BROKERS', 'localhost:9093')
 
 # Database Configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL')
