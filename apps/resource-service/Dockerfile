@@ -11,7 +11,7 @@ COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
 
-# Copy source code
+# Copy source code with tsconfig
 COPY apps/resource-service ./apps/resource-service/
 
 # Install all dependencies (including dev dependencies for building)
