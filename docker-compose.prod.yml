@@ -339,6 +339,42 @@ services:
         reservations:
           memory: 128M
 
+  quiz-service:
+    image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/collablearn/quiz-service:latest
+    container_name: quiz-service
+    ports:
+      - "3009:3009"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    networks:
+      - collab-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('net').createConnection(3009, '0.0.0.0').on('connect', () => process.exit(0)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
   # Python Services
   document-query-service:
     image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/collablearn/document-query-service:latest

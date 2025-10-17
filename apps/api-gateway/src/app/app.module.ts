@@ -58,9 +58,9 @@ import { StudyPlanService } from './services/study-plan.service';
       {
         name: 'FORUM_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'host.docker.internal', port: 3004 }, // FORUM_TCP_PORT
-        //options: { host: 'localhost', port: 3004 }, // Use this if running gateway on host
-        //options: { host: 'forum-service', port: 3004 } // Use this if both in Docker
+        //options: { host: 'host.docker.internal', port: 3005 }, // FORUM_TCP_PORT
+        //options: { host: 'localhost', port: 3005 }, // Use this if running gateway on host
+        options: { host: 'forum-and-notification-service', port: 3005 } // Use this if both in Docker
       },
     ]),
     ClientsModule.register([
@@ -76,9 +76,9 @@ import { StudyPlanService } from './services/study-plan.service';
       {
         name: 'QUIZ_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'host.docker.internal', port: 3007 }, // QUIZ_SERVICE_PORT
-        //options: { host: 'localhost', port: 3007 }, // Use this if running gateway on host
-        //options: { host: 'quiz-service', port: 3007 } // Use this if both in Docker
+        //options: { host: 'host.docker.internal', port: 3009 }, // QUIZ_SERVICE_PORT
+        //options: { host: 'localhost', port: 3009 }, // Use this if running gateway on host
+        options: { host: 'quiz-service', port: 3009 } // Use this if both in Docker
       },
     ]),
     ClientsModule.registerAsync([

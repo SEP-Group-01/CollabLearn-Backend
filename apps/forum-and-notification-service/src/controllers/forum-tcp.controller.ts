@@ -12,17 +12,21 @@ export class ForumTcpController {
   constructor(private readonly forumService: ForumService) {}
 
   // Get group messages via TCP
-  @MessagePattern({ cmd: 'get-workspace-forum-messages' })
+  @MessagePattern({ cmd: 'get-group-messages' })
   async getGroupMessages(
-    @Payload() data: { workspaceId: string; userId?: string },
+    @Payload() data: { groupId?: string; workspaceId?: string; userId?: string },
   ) {
     try {
-      // Use workspaceId as string (UUID)
-      const workspaceId = data.workspaceId;
+      // Support both groupId and workspaceId for backward compatibility
+      const workspaceId = data.workspaceId || data.groupId;
       const userId = data.userId || 'anonymous';
 
+      if (!workspaceId) {
+        throw new Error('workspaceId or groupId is required');
+      }
+
       this.logger.log(
-        `TCP: Getting messages for workspace ${data.workspaceId}`,
+        `TCP: Getting messages for workspace ${workspaceId}`,
       );
       const messages = await this.forumService.getGroupMessages(
         workspaceId,

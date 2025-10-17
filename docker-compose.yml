@@ -269,6 +269,94 @@ services:
       retries: 3
       start_period: 40s
 
+  quiz-service:
+    build:
+      context: .
+      dockerfile: apps/quiz-service/Dockerfile
+    ports:
+      - "3009:3009" # TCP Microservice
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_KEY}}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY}}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+      - FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}
+    networks:
+      - collab-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('net').createConnection(3009, '0.0.0.0').on('connect', () => process.exit(0)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  document-query-service:
+    build:
+      context: .
+      dockerfile: python/document-query-service/Dockerfile
+    ports:
+      - "8000:8000" # HTTP Server
+    environment:
+      - PYTHONUNBUFFERED=1
+      - KAFKA_BROKERS=kafka:9092
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - HUGGINGFACEHUB_API_TOKEN=${HUGGINGFACEHUB_API_TOKEN}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - collab-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  study-plan-service:
+    build:
+      context: .
+      dockerfile: python/study_plan_service/Dockerfile
+    ports:
+      - "8001:8000" # HTTP Server (mapped to 8001 on host to avoid conflict)
+    environment:
+      - PYTHONUNBUFFERED=1
+      - KAFKA_BROKERS=kafka:9092
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - collab-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 networks:
   collab-network:
     driver: bridge
