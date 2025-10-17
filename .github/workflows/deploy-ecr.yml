@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: ap-southeast-2
   ECR_REPOSITORY_PREFIX: collablearn
 
 jobs:
@@ -33,6 +33,10 @@ jobs:
             dockerfile: apps/resource-service/Dockerfile
           - name: document-editor-service
             dockerfile: apps/document-editor-service/Dockerfile
+          - name: forum-and-notification-service
+            dockerfile: apps/forum-and-notification-service/Dockerfile
+          - name: quiz-service
+            dockerfile: apps/quiz-service/Dockerfile
           - name: document-query-service
             dockerfile: python/document-query-service/Dockerfile
           - name: study-plan-service
