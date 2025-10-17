@@ -169,24 +169,32 @@ export class QuizController {
       const userId = authResult.user.id;
       console.log('Token validated for user:', userId);
 
-      // 3. Check user permissions with workspace service
-      // console.log('Checking user permissions for thread:', body.thread_id);
-      // const permissionResult = await firstValueFrom(
-      //   this.workspacesService.send(
-      //     { cmd: 'check_moderator_or_admin' },
-      //     { userId, threadId: body.thread_id },
-      //   ),
-      // );
+      // 3. Check user permissions - require thread_id for permission check
+      if (!body.thread_id) {
+        throw new HttpException(
+          'Thread ID is required to create a quiz',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
 
-      // if (!permissionResult.success) {
-      //   throw new HttpException(
-      //     'Permission denied: You must be a workspace admin or thread moderator to create quizzes',
-      //     HttpStatus.FORBIDDEN,
-      //   );
-      // }
+      console.log('Checking user permissions for thread:', body.thread_id);
+      const permissionResult = await firstValueFrom(
+        this.quizService.send(
+          { cmd: 'check-admin-or-moderator' },
+          { userId, threadId: body.thread_id },
+        ),
+      );
 
-      // const { workspaceId } = permissionResult;
-      // console.log('Permission granted for workspace:', workspaceId);
+      console.log('Permission check result:', permissionResult);
+
+      if (!permissionResult?.success) {
+        throw new HttpException(
+          'Permission denied. Only workspace admins and thread moderators can create quizzes.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      console.log('Permission granted for workspace:', permissionResult.workspaceId);
 
       // 4. Create quiz with validated user data
       const createQuizData = {
@@ -304,8 +312,15 @@ export class QuizController {
         quiz: result.quiz,
       };
     } catch (err) {
-      const error = err as Error;
       console.error('Error creating quiz in thread:', err);
+      
+      // If it's already an HttpException, preserve the original status
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      
+      // Otherwise, wrap unknown errors as 500
+      const error = err as Error;
       throw new HttpException(
         error.message || 'Failed to create quiz',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -492,12 +507,22 @@ export class QuizController {
 
       const userId = authResult.user?.id;
 
-      return await firstValueFrom(
+      const result = await firstValueFrom(
         this.quizService.send(
           { cmd: 'get_active_attempt' },
           { userId, quizId },
         ),
       );
+      
+      // Handle case where no active attempt exists
+      if (result && result.success === false) {
+        throw new HttpException(
+          result.message || 'No active attempt found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      
+      return result;
     } catch (error) {
       console.error('Error getting active attempt:', error);
       if (error instanceof HttpException) {
