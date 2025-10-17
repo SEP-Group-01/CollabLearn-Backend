@@ -58,8 +58,10 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       
       - name: Create ECR repository if it doesn't exist
-        continue-on-error: true
         run: |
+          aws ecr describe-repositories \
+            --repository-names ${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }} \
+            --region ${{ env.AWS_REGION }} 2>/dev/null || \
           aws ecr create-repository \
             --repository-name ${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }} \
             --region ${{ env.AWS_REGION }} \
