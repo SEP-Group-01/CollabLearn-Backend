@@ -99,7 +99,7 @@ export class QuizService {
     const insertPayload: Record<string, unknown> = {
       title: createQuizDto.title,
       description: createQuizDto.description,
-      allocated_time: createQuizDto.timeAllocated,
+      allocated_time: createQuizDto.timeAllocated || 30, // Default to 30 minutes if not provided
       creator_id: userId,
       thread_id: threadId,
     };
@@ -466,11 +466,12 @@ export class QuizService {
         // Active attempt exists and hasn't expired - return resume data
         const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
 
-        console.log('[startQuiz] Resuming existing attempt with timeAllocated:', quiz.allocated_time);
+        const timeAllocated = quiz.allocated_time || 30; // Default to 30 minutes if not set
+        console.log('[startQuiz] Resuming existing attempt with timeAllocated:', timeAllocated);
         return {
           attemptId: existingAttempt.id,
           startedAt: existingAttempt.created_at,
-          timeAllocated: quiz.allocated_time,
+          timeAllocated: timeAllocated,
           expiresAt: expiresAt.toISOString(),
           timeRemaining,
           isResume: true,
@@ -524,12 +525,16 @@ export class QuizService {
     console.log('[startQuiz] Calculated expiresAt:', expiresAt.toISOString());
     console.log('[startQuiz] Time remaining in seconds:', quiz.allocated_time * 60);
     
+    // Ensure timeAllocated is properly set
+    const timeAllocated = quiz.allocated_time || 30; // Default to 30 minutes if not set
+    const timeRemainingSeconds = timeAllocated * 60;
+    
     return {
       attemptId: attempt.id,
       startedAt: attempt.created_at,
-      timeAllocated: quiz.allocated_time,
+      timeAllocated: timeAllocated,
       expiresAt: expiresAt.toISOString(),
-      timeRemaining: quiz.allocated_time * 60, // in seconds
+      timeRemaining: timeRemainingSeconds, // in seconds
       quiz: {
         id: quiz.id,
         title: quiz.title,
@@ -639,6 +644,8 @@ export class QuizService {
   async attemptQuiz(attemptQuizDto: AttemptQuizDto) {
     const supabase = this.supabaseService.getClient();
 
+    console.log('[attemptQuiz] Starting attempt submission:', attemptQuizDto);
+
     // Get the attempt
     const { data: attempt, error: attemptError } = await supabase
       .from('quiz_attempt')
@@ -646,12 +653,28 @@ export class QuizService {
       .eq('id', attemptQuizDto.attemptId)
       .single();
 
-    if (attemptError || !attempt) {
-      throw new BadRequestException('Invalid attempt');
+    if (attemptError) {
+      console.error('[attemptQuiz] Error fetching attempt:', attemptError);
+      throw new BadRequestException(`Database error fetching attempt: ${attemptError.message}`);
     }
+
+    if (!attempt) {
+      console.error('[attemptQuiz] Attempt not found for ID:', attemptQuizDto.attemptId);
+      throw new BadRequestException('Invalid attempt ID');
+    }
+
+    console.log('[attemptQuiz] Found attempt:', {
+      id: attempt.id,
+      quiz_id: attempt.quiz_id,
+      user_id: attempt.user_id,
+      completed: attempt.completed,
+      created_at: attempt.created_at,
+      expires_at: attempt.expires_at
+    });
 
     // Check if already completed
     if (attempt.completed) {
+      console.log('[attemptQuiz] Attempt already completed');
       throw new BadRequestException('Quiz attempt already completed');
     }
 
@@ -661,15 +684,21 @@ export class QuizService {
     // Check expiration time
     if (attempt.expires_at) {
       expiresAt = new Date(attempt.expires_at);
+      console.log('[attemptQuiz] Using expires_at from attempt:', expiresAt);
     } else {
       // Fallback for legacy attempts
+      console.log('[attemptQuiz] No expires_at, calculating from created_at');
       const quiz = await this.getQuiz(attempt.quiz_id);
       const createdAt = new Date(attempt.created_at);
-      expiresAt = new Date(createdAt.getTime() + quiz.allocated_time * 60 * 1000);
+      expiresAt = new Date(createdAt.getTime() + (quiz.allocated_time || 30) * 60 * 1000);
+      console.log('[attemptQuiz] Calculated expires_at:', expiresAt);
     }
+
+    console.log('[attemptQuiz] Time check - Current:', currentTime, 'Expires:', expiresAt, 'Expired:', currentTime > expiresAt);
 
     // Check if attempt has expired
     if (currentTime > expiresAt) {
+      console.log('[attemptQuiz] Attempt has expired, auto-completing');
       // Auto-complete expired attempt with 0 marks
       const timeTakenMs = expiresAt.getTime() - new Date(attempt.created_at).getTime();
       const timeTakenInterval = this.formatTimeInterval(timeTakenMs);
@@ -687,7 +716,15 @@ export class QuizService {
     }
 
     // Get quiz to calculate marks
+    console.log('[attemptQuiz] Fetching quiz data for quiz_id:', attempt.quiz_id);
     const quiz = await this.getQuiz(attempt.quiz_id);
+    
+    if (!quiz) {
+      console.error('[attemptQuiz] Quiz not found for ID:', attempt.quiz_id);
+      throw new BadRequestException('Quiz not found');
+    }
+    
+    console.log('[attemptQuiz] Quiz loaded successfully, questions:', quiz.quiz_questions?.length || 0);
     let marksObtained = 0;
 
     // Insert user answers and calculate marks
@@ -735,18 +772,24 @@ export class QuizService {
         );
         const correctLetters = correctOptions
           .map((opt) => opt.sequence_letter)
+          .filter(letter => letter) // Filter out null/undefined letters
           .sort();
 
         console.log('[attemptQuiz] Correct letters:', correctLetters);
-        console.log('[attemptQuiz] User answer:', answerString);
+        console.log('[attemptQuiz] Selected letters:', selectedLetters.sort());
+        console.log('[attemptQuiz] User answer string:', answerString);
         console.log('[attemptQuiz] Expected correct answer:', correctLetters.join(','));
 
-        // Full marks only if answer matches exactly
-        if (answerString === correctLetters.join(',')) {
+        // Compare sorted arrays directly to handle empty cases properly
+        const userAnswerSorted = selectedLetters.sort();
+        const isCorrect = userAnswerSorted.length === correctLetters.length &&
+                         userAnswerSorted.every((letter, index) => letter === correctLetters[index]);
+
+        if (isCorrect) {
           marksObtained += question.marks;
           console.log('[attemptQuiz] ✅ Correct answer! Added', question.marks, 'marks. Total:', marksObtained);
         } else {
-          console.log('[attemptQuiz] ❌ Wrong answer. No marks added.');
+          console.log('[attemptQuiz] ❌ Wrong answer. Expected:', correctLetters, 'Got:', userAnswerSorted);
         }
       } else {
         console.log('[attemptQuiz] ⚠️ Question not found for ID:', answer.questionId);

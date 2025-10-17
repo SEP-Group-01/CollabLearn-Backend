@@ -258,21 +258,26 @@ export class QuizController {
       const userId =
         authResult.user.id || authResult.user.userId || authResult.user.sub;
 
-      // For now, we'll skip the workspace permission check
-      // and let the quiz service handle the workspace lookup from threadId
-      // const permissionResult = await firstValueFrom(
-      //   this.workspacesService.send(
-      //     { cmd: 'check_user_permission' },
-      //     { userId, threadId },
-      //   ),
-      // );
+      // Check if user has admin or moderator permissions for this thread
+      console.log('[createQuizInThread] Checking permissions for user:', userId, 'thread:', threadId);
+      
+      const permissionResult = await firstValueFrom(
+        this.quizService.send(
+          { cmd: 'check-admin-or-moderator' },
+          { userId, threadId },
+        ),
+      );
 
-      // if (!permissionResult?.success) {
-      //   throw new HttpException('Permission denied', HttpStatus.FORBIDDEN);
-      // }
+      console.log('[createQuizInThread] Permission check result:', permissionResult);
 
-      // const { workspaceId } = permissionResult;
-      const workspaceId = 'temp-workspace-id'; // Temporary fix
+      if (!permissionResult?.success) {
+        throw new HttpException(
+          'Permission denied. Only workspace admins and thread moderators can create quizzes.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      const workspaceId = permissionResult.workspaceId;
 
       const createQuizData = {
         createQuizDto: {
@@ -847,6 +852,25 @@ export class ThreadQuizController {
       const userId =
         authResult.user.id || authResult.user.userId || authResult.user.sub;
 
+      // Check if user has admin or moderator permissions for this thread
+      console.log('[ThreadQuizController.createQuizInThread] Checking permissions for user:', userId, 'thread:', threadId);
+      
+      const permissionResult = await firstValueFrom(
+        this.quizService.send(
+          { cmd: 'check-admin-or-moderator' },
+          { userId, threadId },
+        ),
+      );
+
+      console.log('[ThreadQuizController.createQuizInThread] Permission check result:', permissionResult);
+
+      if (!permissionResult?.success) {
+        throw new HttpException(
+          'Permission denied. Only workspace admins and thread moderators can create quizzes.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
       const createQuizData = {
         createQuizDto: {
           title: body.title,
@@ -905,6 +929,25 @@ export class ThreadQuizController {
 
       const userId =
         authResult.user.id || authResult.user.userId || authResult.user.sub;
+
+      // Check if user has admin or moderator permissions for this thread
+      console.log('[ThreadQuizController.createQuizInThreadWithCreate] Checking permissions for user:', userId, 'thread:', threadId);
+      
+      const permissionResult = await firstValueFrom(
+        this.quizService.send(
+          { cmd: 'check-admin-or-moderator' },
+          { userId, threadId },
+        ),
+      );
+
+      console.log('[ThreadQuizController.createQuizInThreadWithCreate] Permission check result:', permissionResult);
+
+      if (!permissionResult?.success) {
+        throw new HttpException(
+          'Permission denied. Only workspace admins and thread moderators can create quizzes.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
 
       const createQuizData = {
         createQuizDto: {
