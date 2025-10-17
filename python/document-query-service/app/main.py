@@ -1,12 +1,18 @@
 import asyncio
 from fastapi import FastAPI
-from kafka.producer import KafkaProducerService
-from kafka.consumer import KafkaConsumerService
+from kafka_service.producer import KafkaProducerService
+from kafka_service.consumer import KafkaConsumerService
 from controllers.query_controller import QueryController
 from dotenv import load_dotenv
+import os
 
 
-BROKERS = "localhost:9093"
+# Load environment variables
+load_dotenv()
+
+# Get Kafka brokers from environment or use default
+BROKERS = os.getenv("KAFKA_BROKERS", "localhost:9093")
+
 # Topics that this service will handle
 TOPICS = [
     "document-query.chats",

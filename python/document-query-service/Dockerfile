@@ -16,11 +16,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY python/document-query-service/requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy the service code
-COPY . .
+# Copy ONLY the service code (not the entire workspace)
+COPY python/document-query-service/app ./app
 
 # Command to start the service
 # Since you don't expose an API, you just need to run main.py

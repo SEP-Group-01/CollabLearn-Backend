@@ -72,8 +72,10 @@ async function bootstrap() {
     },
   });
 
-  // Set global prefix for all REST endpoints
-  app.setGlobalPrefix('api');
+  // Set global prefix for all REST endpoints except health
+  app.setGlobalPrefix('api', {
+    exclude: ['health'],
+  });
 
   // WebSocket Adapter - Using custom Socket.IO adapter for better namespace support
   app.useWebSocketAdapter(new CustomSocketIOAdapter(app));

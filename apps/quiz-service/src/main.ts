@@ -12,13 +12,13 @@ async function bootstrap() {
       transport: Transport.TCP,
       options: {
         host: '0.0.0.0',
-        port: 3007,
+        port: 3009,
       },
     },
   );
 
   await app.listen();
-  logger.log('🚀 Quiz Service is listening on port 3007');
+  logger.log('🚀 Quiz Service is listening on port 3009');
 }
 
 void bootstrap();
