@@ -1,30 +1,35 @@
+"""
+Configuration for Study Plan Service
+"""
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 # Kafka Configuration
-KAFKA_BROKER_URL = os.getenv("KAFKA_BROKER_URL", "localhost:9092")
-KAFKA_REQUEST_TOPIC = os.getenv("KAFKA_REQUEST_TOPIC", "study-plan-requests")
-KAFKA_RESULT_TOPIC = os.getenv("KAFKA_RESULT_TOPIC", "study-plan-results")
+# NOTE: Use 'localhost:9093' when running locally (not in Docker)
+# Change to 'kafka:9092' when running in Docker container
+KAFKA_BROKER_URL = 'localhost:9093'  # TODO: Change to 'kafka:9092' after dockerizing
 
 # Database Configuration
-DATABASE_URL = os.getenv("DATABASE_URL")
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+
+# OpenAI Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Service Configuration
-SERVICE_NAME = os.getenv("SERVICE_NAME", "study-plan-service")
-SERVICE_VERSION = os.getenv("SERVICE_VERSION", "2.0.0")
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+SERVICE_NAME = 'study-plan-service'
+SERVICE_GROUP_ID = 'study-plan-service-group'
 
-# Optimization Configuration
-MAX_OPTIMIZATION_TIME_SECONDS = int(os.getenv("MAX_OPTIMIZATION_TIME_SECONDS", "30"))
-DEFAULT_WEEKLY_HOURS = int(os.getenv("DEFAULT_WEEKLY_HOURS", "10"))
-DEFAULT_STUDY_WEEKS = int(os.getenv("DEFAULT_STUDY_WEEKS", "4"))
+# Kafka Topics
+TOPICS = {
+    'study_plan_requests': 'study-plan-requests',
+    'study_plan_progress': 'study-plan-progress',
+    'study_plan_slots': 'study-plan-slots',
+    'study_plan_tasks': 'study-plan-tasks'
+}
 
-# Validation
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is required")
-
-if not KAFKA_BROKER_URL:
-    raise ValueError("KAFKA_BROKER_URL environment variable is required")
+# Logging Configuration
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

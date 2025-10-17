@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsIn, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsUUID, IsNumber } from 'class-validator';
 
 export class CreateResourceDto {
   @IsUUID()
@@ -21,6 +21,10 @@ export class CreateResourceDto {
   @IsOptional()
   @IsString()
   url?: string; // For link resources
+
+  @IsOptional()
+  @IsNumber()
+  estimated_completion_time?: number; // In minutes
 }
 
 export class UpdateResourceDto {

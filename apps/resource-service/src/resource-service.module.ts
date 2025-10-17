@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ResourceController } from './controllers/resource.controller';
+// import { ResourceController } from './controllers/resource.controller';
 import { ResourceTcpController } from './controllers/resource-tcp.controller';
 import { ResourceService } from './services/resource.service';
 import { SupabaseService } from './services/supabase.service';
@@ -15,7 +15,7 @@ import * as path from 'path';
       isGlobal: true, // Make env accessible globally without importing again
     }),
   ],
-  controllers: [ResourceController, ResourceTcpController],
+  controllers: [ResourceTcpController],
   providers: [ResourceService, SupabaseService, FirebaseAdminService],
 })
 export class ResourceServiceModule {

@@ -17,7 +17,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { firstValueFrom } from 'rxjs';
 
-@Controller('workspaces')
+@Controller('resources')
 export class ResourceController {
   constructor(
     @Inject('RESOURCE_SERVICE')
@@ -71,6 +71,7 @@ export class ResourceController {
       title: string;
       description?: string;
       url: string;
+      estimated_completion_time?: number;
     },
   ) {
     try {
@@ -127,7 +128,12 @@ export class ResourceController {
   async createThreadDocument(
     @Param('workspaceId') workspaceId: string,
     @Param('threadId') threadId: string,
-    @Body() body: { user_id: string; title: string; description?: string },
+    @Body() body: { 
+      user_id: string; 
+      title: string; 
+      description?: string;
+      estimated_completion_time?: number;
+    },
     @UploadedFile() file: Express.Multer.File,
   ) {
     try {
@@ -193,7 +199,12 @@ export class ResourceController {
   async createThreadVideo(
     @Param('workspaceId') workspaceId: string,
     @Param('threadId') threadId: string,
-    @Body() body: { user_id: string; title: string; description?: string },
+    @Body() body: { 
+      user_id: string; 
+      title: string; 
+      description?: string;
+      estimated_completion_time?: number;
+    },
     @UploadedFile() file: Express.Multer.File,
   ) {
     try {
@@ -474,6 +485,60 @@ export class ResourceController {
       console.error('❌ Error creating/updating review:', error);
       throw new HttpException(
         `Error creating/updating review: ${error.message || error}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // User Progress Routes
+  @Get('progress/:userId/:resourceId')
+  async getUserProgress(
+    @Param('userId') userId: string,
+    @Param('resourceId') resourceId: string,
+  ) {
+    try {
+      console.log('📊 Getting user progress:', { userId, resourceId });
+      const result = await firstValueFrom(
+        this.resourceService.send(
+          { cmd: 'get-user-progress' },
+          { userId, resourceId },
+        ),
+      );
+      console.log('✅ User progress fetched:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Error fetching user progress:', error);
+      throw new HttpException(
+        `Error fetching user progress: ${error.message || error}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('progress/:userId/:resourceId')
+  async updateUserProgress(
+    @Param('userId') userId: string,
+    @Param('resourceId') resourceId: string,
+    @Body()
+    body: {
+      completion_status: 'not_started' | 'in_progress' | 'completed' | 'needs_revision';
+      progress_percentage?: number;
+    },
+  ) {
+    try {
+      console.log('📊 Updating user progress:', { userId, resourceId, body });
+      const result = await firstValueFrom(
+        this.resourceService.send(
+          { cmd: 'update-user-progress' },
+          { userId, resourceId, ...body },
+        ),
+      );
+      console.log('✅ User progress updated:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Error updating user progress:', error);
+      throw new HttpException(
+        `Error updating user progress: ${error.message || error}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
