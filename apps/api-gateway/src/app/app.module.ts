@@ -6,6 +6,7 @@ import { ResourceController } from './controllers/resource.controller';
 import { ThreadsController } from './controllers/threads.controller';
 import { QueryController } from './controllers/query.controller';
 import { ForumController } from './controllers/forum.controller';
+import { HealthController } from './controllers/health.controller';
 import { KafkaService } from './services/kafka.service';
 import { RedisBridgeService } from './services/redis-bridge.service';
 import { KafkaReplyController } from './controllers/kafka-reply.controller';
@@ -102,6 +103,7 @@ import { StudyPlanService } from './services/study-plan.service';
     ]),
   ],
   controllers: [
+    HealthController,
     AuthController,
     WorkspacesController,
     ResourceController,
