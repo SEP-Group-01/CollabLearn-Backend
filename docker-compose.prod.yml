@@ -291,6 +291,54 @@ services:
         reservations:
           memory: 128M
 
+  forum-and-notification-service:
+    image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/collablearn/forum-and-notification-service:latest
+    container_name: forum-and-notification-service
+    ports:
+      - "3004:3004"
+      - "3005:3005"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - FORUM_SERVICE_PORT=3004
+      - FORUM_TCP_PORT=3005
+      - ENABLE_TCP=true
+      - KAFKA_BROKERS=kafka:9092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - collab-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3004/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
   # Python Services
   document-query-service:
     image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/collablearn/document-query-service:latest

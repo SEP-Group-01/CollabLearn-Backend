@@ -230,6 +230,45 @@ services:
       retries: 3
       start_period: 40s
 
+  forum-and-notification-service:
+    build:
+      context: .
+      dockerfile: apps/forum-and-notification-service/Dockerfile
+    ports:
+      - "3004:3004" # HTTP/WebSocket Server
+      - "3005:3005" # TCP Microservice
+    environment:
+      - NODE_ENV=production
+      - FORUM_SERVICE_PORT=3004
+      - FORUM_TCP_PORT=3005
+      - ENABLE_TCP=${ENABLE_TCP:-true}
+      - KAFKA_BROKERS=${KAFKA_BROKERS_DOCKER:-kafka:9092}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_KEY}}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY}}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - collab-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3004/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 networks:
   collab-network:
     driver: bridge
