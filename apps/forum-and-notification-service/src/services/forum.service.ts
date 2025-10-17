@@ -8,6 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { SupabaseService } from './supabase.service';
+import { FirebaseStorageService } from './firebase-storage.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
 import { CreateReplyDto } from '../dto/create-reply.dto';
 import { ToggleLikeDto } from '../dto/toggle-like.dto';
@@ -15,7 +16,10 @@ import { MessageType, ReplyType, Author } from '../entities/forum.interfaces';
 
 @Injectable()
 export class ForumService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly firebaseStorageService: FirebaseStorageService,
+  ) {}
 
   async getGroupMessages(
     workspaceId: string, // UUID string
@@ -137,7 +141,7 @@ export class ForumService {
         isPinned: false,
         likes: messageLikes.length,
         isLiked: messageLikes.some((like: any) => like.user_id === userId),
-        image: undefined,
+        image: message.image_url, // Include image URL from database
         workspaceId: message.workspace_id,
         reply_count: message.reply_count || messageReplies.length,
         replies: messageReplies.map((reply: any) => {
@@ -184,6 +188,53 @@ export class ForumService {
   ): Promise<MessageType> {
     const supabase = this.supabaseService.getClient();
 
+    // Handle image upload if present
+    let imageUrl: string | undefined;
+    if (createMessageDto.image) {
+      try {
+        console.log('🖼️ Processing image upload...');
+        console.log('📦 Image data length:', createMessageDto.image.length);
+        
+        // Extract base64 data and mime type
+        const matches = createMessageDto.image.match(/^data:(.+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const mimeType = matches[1];
+          const base64Data = matches[2];
+          
+          console.log('✅ Base64 data extracted successfully');
+          console.log('📝 MIME type:', mimeType);
+          console.log('💾 Base64 data size:', base64Data.length, 'bytes');
+          
+          // Upload to Firebase Storage
+          console.log('⬆️ Uploading to Firebase Storage...');
+          imageUrl = await this.firebaseStorageService.uploadMessageImage(
+            base64Data,
+            mimeType,
+            createMessageDto.workspaceId,
+          );
+          
+          console.log('✅ Image uploaded successfully!');
+          console.log('🔗 Image URL:', imageUrl);
+        } else {
+          console.error('❌ Invalid image format - not a valid data URL');
+          console.log('Image string preview:', createMessageDto.image.substring(0, 100));
+        }
+      } catch (error) {
+        console.error('❌ Error uploading image:', error);
+        console.error('Error details:', error.message);
+        // Continue without image if upload fails
+      }
+    }
+
+    console.log('💾 Saving message to database...');
+    console.log('📝 Message data:', {
+      content: createMessageDto.content.substring(0, 50) + '...',
+      workspace_id: createMessageDto.workspaceId,
+      author_id: createMessageDto.authorId,
+      has_image: !!imageUrl,
+      image_url: imageUrl,
+    });
+
     const { data: message, error } = await supabase
       .from('messages')
       .insert({
@@ -191,10 +242,17 @@ export class ForumService {
         workspace_id: createMessageDto.workspaceId,
         author_id: createMessageDto.authorId,
         parent_id: null, // For now, we'll handle replies separately
+        image_url: imageUrl, // Add image URL
         created_at: new Date().toISOString(),
       })
       .select('*')
       .single();
+    
+    if (message) {
+      console.log('✅ Message saved successfully!');
+      console.log('📄 Message ID:', message.id);
+      console.log('🖼️ Image URL in DB:', message.image_url);
+    }
 
     if (error) {
       throw new BadRequestException(
@@ -240,7 +298,7 @@ export class ForumService {
       isPinned: false, // Your schema doesn't have is_pinned, so default to false
       likes: 0,
       isLiked: false,
-      image: undefined, // Your schema doesn't have image_url
+      image: message.image_url, // Return the image URL
       workspaceId: message.workspace_id, // Changed from groupId to workspaceId
       replies: [],
     };

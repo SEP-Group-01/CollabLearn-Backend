@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ForumService } from './services/forum.service';
 import { SupabaseService } from './services/supabase.service';
+import { FirebaseStorageService } from './services/firebase-storage.service';
 import { HealthController } from './health.controller';
 import { ForumGateway } from './gateways/forum.gateway';
 import { ForumTcpController } from './controllers/forum-tcp.controller';
@@ -16,6 +17,6 @@ import { ForumTcpController } from './controllers/forum-tcp.controller';
     HealthController,
     ForumTcpController, // Add TCP controller
   ],
-  providers: [ForumService, SupabaseService, ForumGateway],
+  providers: [ForumService, SupabaseService, FirebaseStorageService, ForumGateway],
 })
 export class ForumAndNotificationServiceModule {}
