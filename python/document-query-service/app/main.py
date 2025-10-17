@@ -1,8 +1,8 @@
 import asyncio
 from fastapi import FastAPI
-from kafka_service.producer import KafkaProducerService
-from kafka_service.consumer import KafkaConsumerService
-from controllers.query_controller import QueryController
+from app.kafka_service.producer import KafkaProducerService
+from app.kafka_service.consumer import KafkaConsumerService
+from app.controllers.query_controller import QueryController
 from dotenv import load_dotenv
 import os
 

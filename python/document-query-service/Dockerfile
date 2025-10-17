@@ -23,8 +23,8 @@ RUN pip install --upgrade pip && \
 # Copy ONLY the service code (not the entire workspace)
 COPY python/document-query-service/app ./app
 
+# Set Python path to include app directory for imports
+ENV PYTHONPATH=/app
+
 # Command to start the service
-# Since you don't expose an API, you just need to run main.py
-# CMD ["python", "app/main.py"]
-# If you want to run with Uvicorn for better performance, uncomment the line below
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
