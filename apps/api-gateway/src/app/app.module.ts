@@ -58,9 +58,9 @@ import { StudyPlanService } from './services/study-plan.service';
       {
         name: 'FORUM_SERVICE',
         transport: Transport.TCP,
-        options: { host: 'host.docker.internal', port: 3004 }, // FORUM_TCP_PORT
-        //options: { host: 'localhost', port: 3004 }, // Use this if running gateway on host
-        //options: { host: 'forum-service', port: 3004 } // Use this if both in Docker
+        //options: { host: 'host.docker.internal', port: 3005 }, // FORUM_TCP_PORT
+        //options: { host: 'localhost', port: 3005 }, // Use this if running gateway on host
+        options: { host: 'forum-and-notification-service', port: 3005 } // Use this if both in Docker
       },
     ]),
     ClientsModule.register([

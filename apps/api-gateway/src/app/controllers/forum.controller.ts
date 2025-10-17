@@ -84,7 +84,7 @@ export class ForumController {
     }
   }
 
-  // Get group messages
+  // Get group messages (legacy endpoint)
   @Get('groups/:groupId/messages')
   async getGroupMessages(
     @Param('groupId', ParseIntPipe) groupId: number,
@@ -102,6 +102,30 @@ export class ForumController {
       return this.handleServiceResponse(result, 'Failed to fetch messages');
     } catch (error) {
       this.handleError(error, 'Failed to fetch messages');
+    }
+  }
+
+  // Get workspace forum messages (new endpoint for workspace-based forums)
+  @Get('workspaces/:workspaceId/forum/messages')
+  async getWorkspaceForumMessages(
+    @Param('workspaceId') workspaceId: string,
+    @Query('userId') userId?: string,
+  ): Promise<any> {
+    try {
+      console.log(`📥 Gateway: Getting forum messages for workspace ${workspaceId}`);
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const result = await firstValueFrom(
+        this.forumService.send(
+          { cmd: 'get-group-messages' },
+          { workspaceId, userId },
+        ),
+      );
+
+      return this.handleServiceResponse(result, 'Error fetching workspace forum messages');
+    } catch (error) {
+      console.error(`❌ Gateway: Error fetching workspace forum messages:`, error);
+      this.handleError(error, 'Error fetching workspace forum messages');
     }
   }
 
