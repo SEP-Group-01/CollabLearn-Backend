@@ -220,18 +220,29 @@ async def update_study_plan(plan_id: str, update_data: Dict[str, Any]) -> Dict[s
 async def drop_study_plan(plan_id: str, user_id: str) -> bool:
     """Drop a study plan and free all associated slots"""
     try:
-        # Update plan status
+        # First, get all tasks to free the slots
+        tasks_result = supabase.table('scheduled_tasks').select('study_slot_id').eq('study_plan_id', plan_id).execute()
+        task_slot_ids = list(set([task['study_slot_id'] for task in tasks_result.data]))
+        
+        logger.info(f"Dropping study plan {plan_id}, found {len(tasks_result.data)} tasks using {len(task_slot_ids)} unique slots")
+        
+        # Delete all scheduled tasks for this plan
+        delete_result = supabase.table('scheduled_tasks').delete().eq('study_plan_id', plan_id).execute()
+        logger.info(f"Deleted {len(delete_result.data) if delete_result.data else 0} scheduled tasks for plan {plan_id}")
+        
+        # Free all slots that were used by this plan
+        if task_slot_ids:
+            for slot_id in task_slot_ids:
+                supabase.table('study_slots').update({'is_free': True}).eq('id', slot_id).execute()
+            logger.info(f"Freed {len(task_slot_ids)} study slots")
+        
+        # Finally, update plan status
         await update_study_plan(plan_id, {
             'status': 'dropped',
             'dropped_at': datetime.utcnow().isoformat()
         })
         
-        # Delete all scheduled tasks for this plan
-        supabase.table('scheduled_tasks').delete().eq('study_plan_id', plan_id).execute()
-        
-        # Note: Slots will be automatically freed by the database trigger
-        
-        logger.info(f"Dropped study plan: {plan_id}")
+        logger.info(f"Successfully dropped study plan: {plan_id}")
         return True
     
     except Exception as e:

@@ -159,7 +159,8 @@ class KafkaConsumerService:
     async def send_reply(self, reply_topic: str, correlation_id: str, data: dict, partition: int = None):
         """Send reply message to the reply topic"""
         try:
-            response_json = json.dumps(data)
+            # Convert UUIDs to strings for JSON serialization
+            response_json = json.dumps(data, default=str)
             await self.producer.send_message(reply_topic, correlation_id or "default", response_json, partition)
             logger.info(f"[KafkaConsumer] Sent reply to {reply_topic}" + 
                        (f" partition {partition}" if partition is not None else ""))

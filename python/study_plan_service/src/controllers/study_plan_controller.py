@@ -239,6 +239,13 @@ class StudyPlanController:
         """
         try:
             user_id = payload.get('user_id')
+            
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "Missing required field: user_id"
+                }
+            
             max_weeks = payload.get('max_weeks', 1)
             revision_ratio = payload.get('revision_ratio', 0.25)
             scheduling_rules = payload.get('scheduling_rules', {
@@ -248,12 +255,6 @@ class StudyPlanController:
             })
             slots = payload.get('slots', [])
             resources = payload.get('resources', [])
-            
-            if not user_id:
-                return {
-                    "success": False,
-                    "error": "Missing required field: user_id"
-                }
             
             if not slots:
                 return {
@@ -266,6 +267,33 @@ class StudyPlanController:
                     "success": False,
                     "error": "No resources provided"
                 }
+            
+            # CHECK FOR RESOURCE CONFLICTS WITH EXISTING ACTIVE PLANS
+            logger.info(f"Checking for resource conflicts in active plans for user {user_id}")
+            existing_plans = await get_user_study_plans(user_id, status='active')
+            
+            if existing_plans and len(existing_plans) > 0:
+                # Get all resource IDs from existing active plans
+                existing_resource_ids = set()
+                for plan in existing_plans:
+                    plan_tasks = await get_plan_tasks(plan['id'])
+                    for task in plan_tasks:
+                        existing_resource_ids.add(str(task['resource_id']))
+                
+                # Check if any new resources are already in active plans
+                new_resource_ids = set(str(r['resource_id']) for r in resources)
+                conflicting_resources = new_resource_ids.intersection(existing_resource_ids)
+                
+                if conflicting_resources:
+                    logger.warning(f"User {user_id} has {len(conflicting_resources)} conflicting resources in active plans")
+                    return {
+                        "success": False,
+                        "error": f"Some selected resources are already in active study plans. Please deselect them or drop the existing plans first.",
+                        "conflicting_resource_ids": list(conflicting_resources),
+                        "existing_plans_count": len(existing_plans)
+                    }
+                else:
+                    logger.info(f"✅ No resource conflicts found. User can have multiple plans with different resources.")
             
             logger.info(f"Generating study plan for user {user_id} with {len(slots)} slots and {len(resources)} resources")
             
@@ -297,6 +325,24 @@ class StudyPlanController:
                 plan_start_date=plan_start_date
             )
             
+            logger.info("=" * 80)
+            logger.info("📊 GENERATED STUDY PLAN - RAW OUTPUT")
+            logger.info("=" * 80)
+            logger.info(f"\n✅ Total scheduled tasks: {len(scheduled_tasks)}")
+            logger.info(f"\n📈 Plan Metadata:\n{json.dumps(metadata, indent=2)}")
+            logger.info("\n📋 Scheduled Tasks Details:")
+            for i, task in enumerate(scheduled_tasks, 1):
+                logger.info(f"\n--- Task {i} ---")
+                logger.info(f"  Title: {task.get('task_title')}")
+                logger.info(f"  Type: {task.get('task_type')}")
+                logger.info(f"  Week: {task.get('week_number')}")
+                logger.info(f"  Date: {task.get('scheduled_date')}")
+                logger.info(f"  Time: {task.get('start_time')} - {task.get('end_time')}")
+                logger.info(f"  Duration: {task.get('allocated_minutes')} minutes")
+                logger.info(f"  Resource ID: {task.get('resource_id')}")
+                logger.info(f"  Slot ID: {task.get('study_slot_id')}")
+            logger.info("\n" + "=" * 80)
+            
             if not scheduled_tasks:
                 return {
                     "success": False,
@@ -318,8 +364,23 @@ class StudyPlanController:
             # Save plan and tasks
             plan, tasks = await save_study_plan(plan_data, scheduled_tasks)
             
+            logger.info(f"\n💾 SAVED TO DATABASE")
+            logger.info(f"Plan ID: {plan['id']}")
+            logger.info(f"Total tasks saved: {len(tasks)}")
+            
             # Format response
             schedule = await format_schedule_output(tasks, resources)
+            
+            logger.info(f"\n📤 FORMATTED SCHEDULE FOR RESPONSE")
+            logger.info(f"Schedule items: {len(schedule)}")
+            for i, slot in enumerate(schedule, 1):
+                logger.info(f"\n--- Schedule Slot {i} ---")
+                logger.info(f"  Week: {slot.get('week_number')}")
+                logger.info(f"  Day: {slot.get('day_of_week')}")
+                logger.info(f"  Time: {slot.get('start_time')} - {slot.get('end_time')}")
+                logger.info(f"  Resources: {len(slot.get('resources', []))}")
+                for j, res in enumerate(slot.get('resources', []), 1):
+                    logger.info(f"    Resource {j}: {res.get('title')} ({res.get('task_type')})")
             
             response = StudyPlanGenerationResponse(
                 plan_id=plan['id'],
@@ -336,7 +397,8 @@ class StudyPlanController:
                 success=True
             )
             
-            logger.info(f"Successfully generated study plan {plan['id']} with {len(tasks)} tasks")
+            logger.info(f"\n✅ Successfully generated study plan {plan['id']} with {len(tasks)} tasks")
+            logger.info("=" * 80)
             
             return response.dict()
             
@@ -616,7 +678,7 @@ async def format_schedule_output(tasks: List[Dict[str, Any]], resources: List[Di
         
         if key not in slot_groups:
             slot_groups[key] = {
-                'study_slot_id': task.get('study_slot_id'),
+                'slot_id': task.get('study_slot_id'),
                 'week_number': task['week_number'],
                 'day_of_week': task['day_of_week'],
                 'day_name': DayOfWeekEnum.get_name(task['day_of_week']),
