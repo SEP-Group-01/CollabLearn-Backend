@@ -84,21 +84,53 @@ export class WorkspaceUserService {
       'workspaceId:',
       workspaceId,
     );
-    // request workspace logic Implement krla na thama
+    
     try {
+      // Check if request already exists
+      const { data: existingRequest } = await this.supabaseService
+        .getClient()
+        .from('requests')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('workspace_id', workspaceId)
+        .single();
+
+      if (existingRequest) {
+        console.log('ℹ️ [WorkspaceUserService] Join request already exists');
+        return {
+          success: true,
+          message: 'Join request already exists',
+          data: existingRequest,
+        };
+      }
+
+      // Insert new request
       const { data, error } = await this.supabaseService
         .getClient()
         .from('requests')
         .insert([{ user_id: userId, workspace_id: workspaceId }])
         .select()
         .single();
+
+      if (error) {
+        console.error(
+          '❌ [WorkspaceUserService] Error inserting request:',
+          error,
+        );
+        throw new RpcException({
+          status: 500,
+          message: error.message || 'Error requesting workspace',
+        });
+      }
+
       const result = {
         success: true,
         message: 'Join request sent successfully',
         data,
       };
+      
       console.log(
-        '✅ [WorkspaceUserService] requestWorkspace completed (placeholder):',
+        '✅ [WorkspaceUserService] requestWorkspace completed:',
         result,
       );
       return result;
@@ -107,6 +139,9 @@ export class WorkspaceUserService {
         '❌ [WorkspaceUserService] Error requesting workspace:',
         error,
       );
+      if (error instanceof RpcException) {
+        throw error;
+      }
       throw new RpcException({
         status: 500,
         message: 'Error requesting workspace',
