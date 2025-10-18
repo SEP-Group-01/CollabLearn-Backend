@@ -708,108 +708,162 @@ export class DocumentEditorServiceService {
     return await this.mediaService.deleteFile(data.fileId, data.userId);
   }
 
-  // Get documents by thread ID with user permissions
+    // Get documents by thread ID with user permissions
   async getDocumentsByThread(threadId: string, userId: string) {
     try {
-      this.logger.debug(`Getting documents for thread ${threadId} for user ${userId}`);
-      
-      // Get all documents for this thread from database
-      const { data: documents, error } = await this.databaseService.supabase
-        .from('documents')
-        .select(`
-          id,
-          title,
-          created_by,
-          created_at,
-          updated_at,
-          thread_id,
-          is_public,
-          allow_comments,
-          allow_suggestions
-        `)
-        .eq('thread_id', threadId)
-        .eq('is_deleted', false)
-        .order('updated_at', { ascending: false });
+      this.logger.log(`Fetching documents for thread: ${threadId}, user: ${userId}`);
 
-      if (error) {
-        this.logger.error('Error fetching documents:', error);
-        throw error;
-      }
+      // Fetch documents from database
+      const documents = await this.databaseService.getDocumentsByThread(threadId, userId);
 
-      if (!documents || documents.length === 0) {
-        this.logger.debug(`No documents found for thread ${threadId}`);
-        return [];
-      }
+      return documents.map(doc => ({
+        id: doc.id,
+        title: doc.title,
+        createdBy: doc.created_by,
+        createdAt: doc.created_at,
+        updatedAt: doc.updated_at,
+        threadId: doc.thread_id,
+        isPublic: doc.is_public,
+        allowComments: doc.allow_comments,
+        allowSuggestions: doc.allow_suggestions,
+      }));
+    } catch (error) {
+      this.logger.error('Error fetching documents by thread:', error);
+      throw error;
+    }
+  }
 
-      // Check permissions and get collaborator info for each document
-      const transformedDocuments = await Promise.all(
-        documents.map(async (doc) => {
-          // Determine user permission
-          let userPermission = 'read';
-          if (doc.created_by === userId) {
-            userPermission = 'admin';
-          } else if (!doc.is_public) {
-            // Check document_permissions table
-            const { data: permission } = await this.databaseService.supabase
-              .from('document_permissions')
-              .select('permission_level')
-              .eq('document_id', doc.id)
-              .eq('user_id', userId)
-              .eq('is_active', true)
-              .single();
-            
-            if (permission) {
-              userPermission = permission.permission_level;
-            } else if (!doc.is_public) {
-              // No permission and not public, skip this document
-              return null;
-            }
-          }
+  // Document Access Request Methods
+  async requestDocumentAccess(data: {
+    documentId: string;
+    userId: string;
+    requestedPermission: 'read' | 'write';
+    message?: string;
+  }) {
+    try {
+      this.logger.log(`User ${data.userId} requesting ${data.requestedPermission} access to document ${data.documentId}`);
 
-          // Check if user is currently editing
-          const { data: collaborator } = await this.databaseService.supabase
-            .from('document_collaborators')
-            .select('user_id, joined_at, is_active')
-            .eq('document_id', doc.id)
-            .eq('user_id', userId)
-            .eq('is_active', true)
-            .single();
-
-          // Get last active collaborator
-          const { data: lastEditor } = await this.databaseService.supabase
-            .from('document_collaborators')
-            .select('user_id, joined_at')
-            .eq('document_id', doc.id)
-            .eq('is_active', true)
-            .order('joined_at', { ascending: false })
-            .limit(1)
-            .single();
-
-          return {
-            id: doc.id,
-            title: doc.title,
-            createdBy: doc.created_by,
-            createdAt: doc.created_at,
-            updatedAt: doc.updated_at,
-            threadId: doc.thread_id,
-            isPublic: doc.is_public,
-            allowComments: doc.allow_comments,
-            allowSuggestions: doc.allow_suggestions,
-            userPermission: userPermission,
-            isCurrentlyEditing: collaborator ? collaborator.is_active : false,
-            lastEditedBy: lastEditor ? lastEditor.user_id : null,
-            lastEditedAt: lastEditor ? lastEditor.joined_at : null
-          };
-        })
+      // Check if user already has access
+      const hasAccess = await this.documentManagementService.checkPermission(
+        data.documentId,
+        data.userId,
+        data.requestedPermission
       );
 
-      // Filter out null entries (documents with no permission)
-      const filteredDocuments = transformedDocuments.filter(doc => doc !== null);
+      if (hasAccess) {
+        throw new Error('User already has access to this document');
+      }
 
-      this.logger.debug(`Found ${filteredDocuments.length} documents for thread ${threadId}`);
-      return filteredDocuments;
+      // Check if there's already a pending request
+      const hasPendingRequest = await this.databaseService.hasExistingAccessRequest(
+        data.documentId,
+        data.userId
+      );
+
+      if (hasPendingRequest) {
+        throw new Error('You already have a pending access request for this document');
+      }
+
+      // Create access request
+      const request = await this.databaseService.createAccessRequest({
+        document_id: data.documentId,
+        user_id: data.userId,
+        requested_permission: data.requestedPermission,
+        message: data.message,
+      });
+
+      return {
+        success: true,
+        request,
+      };
     } catch (error) {
-      this.logger.error(`Error getting documents by thread ${threadId}:`, error);
+      this.logger.error('Error requesting document access:', error);
+      throw error;
+    }
+  }
+
+  async getPendingAccessRequests(threadId: string, userId: string) {
+    try {
+      this.logger.log(`Fetching pending access requests for thread: ${threadId}`);
+
+      // This would typically check if user is admin/moderator
+      // For now, fetch all pending requests for the thread
+      const requests = await this.databaseService.getPendingAccessRequestsByThread(threadId);
+
+      return requests;
+    } catch (error) {
+      this.logger.error('Error fetching pending access requests:', error);
+      throw error;
+    }
+  }
+
+  async approveAccessRequest(requestId: string, userId: string) {
+    try {
+      this.logger.log(`User ${userId} approving access request: ${requestId}`);
+
+      // Get request details
+      const request = await this.databaseService.getAccessRequest(requestId);
+      
+      if (!request) {
+        throw new Error('Access request not found');
+      }
+
+      if (request.status !== 'pending') {
+        throw new Error('Access request has already been handled');
+      }
+
+      // Update request status
+      await this.databaseService.updateAccessRequestStatus(
+        requestId,
+        'approved',
+        userId
+      );
+
+      // The trigger in the database will automatically grant permission
+
+      return {
+        success: true,
+        message: 'Access request approved successfully',
+      };
+    } catch (error) {
+      this.logger.error('Error approving access request:', error);
+      throw error;
+    }
+  }
+
+  async rejectAccessRequest(data: {
+    requestId: string;
+    userId: string;
+    rejectionReason?: string;
+  }) {
+    try {
+      this.logger.log(`User ${data.userId} rejecting access request: ${data.requestId}`);
+
+      // Get request details
+      const request = await this.databaseService.getAccessRequest(data.requestId);
+      
+      if (!request) {
+        throw new Error('Access request not found');
+      }
+
+      if (request.status !== 'pending') {
+        throw new Error('Access request has already been handled');
+      }
+
+      // Update request status
+      await this.databaseService.updateAccessRequestStatus(
+        data.requestId,
+        'rejected',
+        data.userId,
+        data.rejectionReason
+      );
+
+      return {
+        success: true,
+        message: 'Access request rejected',
+      };
+    } catch (error) {
+      this.logger.error('Error rejecting access request:', error);
       throw error;
     }
   }

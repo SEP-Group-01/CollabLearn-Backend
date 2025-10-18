@@ -40,6 +40,7 @@ async def main():
             'study-plan-requests',
             'study-plan-requests.generate',
             'study-plan-requests.drop-plan',
+            'study-plan-requests.history',
             'study-plan-progress',
             'study-plan-progress.update-progress',
             'study-plan-slots',
@@ -50,7 +51,9 @@ async def main():
             'study-plan-tasks',
             'study-plan-tasks.get-tasks',
             'study-plan-tasks.update-task',
+            'study-plan-analysis',
             'study-plan-analysis.feasibility',
+            'study-plan-workspaces',
             'study-plan-workspaces.get-workspaces'
         ]
         

@@ -582,4 +582,104 @@ export class DatabaseService {
   getSupabaseClient(): SupabaseClient {
     return this.supabase;
   }
+
+  // Document Access Requests
+  async createAccessRequest(data: {
+    document_id: string;
+    user_id: string;
+    requested_permission: 'read' | 'write';
+    message?: string;
+  }): Promise<any> {
+    const { data: result, error } = await this.supabase
+      .from('document_access_requests')
+      .insert({
+        document_id: data.document_id,
+        user_id: data.user_id,
+        requested_permission: data.requested_permission,
+        message: data.message,
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error('Error creating access request:', error);
+      throw new Error(`Failed to create access request: ${error.message}`);
+    }
+
+    return result;
+  }
+
+  async getPendingAccessRequestsByThread(threadId: string): Promise<any[]> {
+    const { data, error } = await this.supabase
+      .from('pending_document_access_requests')
+      .select('*')
+      .eq('thread_id', threadId)
+      .order('requested_at', { ascending: false });
+
+    if (error) {
+      this.logger.error('Error fetching pending access requests:', error);
+      throw new Error(`Failed to fetch pending access requests: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  async updateAccessRequestStatus(
+    requestId: string,
+    status: 'approved' | 'rejected',
+    handledBy: string,
+    rejectionReason?: string,
+  ): Promise<any> {
+    const { data, error } = await this.supabase
+      .from('document_access_requests')
+      .update({
+        status,
+        handled_by: handledBy,
+        handled_at: new Date().toISOString(),
+        rejection_reason: rejectionReason,
+      })
+      .eq('id', requestId)
+      .select()
+      .single();
+
+    if (error) {
+      this.logger.error('Error updating access request status:', error);
+      throw new Error(`Failed to update access request: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async getAccessRequest(requestId: string): Promise<any> {
+    const { data, error } = await this.supabase
+      .from('document_access_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+
+    if (error) {
+      this.logger.error('Error fetching access request:', error);
+      throw new Error(`Failed to fetch access request: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async hasExistingAccessRequest(documentId: string, userId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from('document_access_requests')
+      .select('id')
+      .eq('document_id', documentId)
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .limit(1);
+
+    if (error) {
+      this.logger.error('Error checking existing access request:', error);
+      return false;
+    }
+
+    return (data?.length || 0) > 0;
+  }
 }
