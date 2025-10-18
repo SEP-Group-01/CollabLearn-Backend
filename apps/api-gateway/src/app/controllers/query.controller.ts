@@ -6,13 +6,11 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { KafkaService } from '../services/kafka.service';
-import { StudyPlanService } from '../services/study-plan.service';
 
 @Controller('query')
 export class QueryController {
   constructor(
     private readonly kafkaService: KafkaService,
-    private readonly studyPlanService: StudyPlanService,
   ) {}
 
   @Post('get-chats')
@@ -91,8 +89,10 @@ export class QueryController {
         session_duration_preference: body.preferences?.studyHours * 60 || 60, // convert to minutes
       };
 
-      const response =
-        await this.studyPlanService.analyzeFeasibility(backendRequest);
+      const response = await this.kafkaService.sendMessage(
+        'study-plan-analysis',
+        backendRequest,
+      );
 
       // Transform response to match frontend expectations
       return {
