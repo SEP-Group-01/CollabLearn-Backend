@@ -127,4 +127,76 @@ export class QueryController {
       );
     }
   }
+
+  @Post('query-documents')
+  async queryDocuments(@Body() body: any) {
+    console.log('[QueryController] Query documents request:', body);
+
+    try {
+      const response = await this.kafkaService.sendMessage(
+        'document-query.query-documents',
+        body,
+      );
+      return response;
+    } catch (error) {
+      throw new HttpException(
+        error?.message || 'Error querying documents',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('get-conversations')
+  async getConversations(@Body() body: any) {
+    console.log('[QueryController] Get conversations request:', body);
+
+    try {
+      const response = await this.kafkaService.sendMessage(
+        'document-query.get-conversations',
+        body,
+      );
+      return response;
+    } catch (error) {
+      throw new HttpException(
+        error?.message || 'Error getting conversations',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('get-conversation-messages')
+  async getConversationMessages(@Body() body: any) {
+    console.log('[QueryController] Get conversation messages request:', body);
+
+    try {
+      const response = await this.kafkaService.sendMessage(
+        'document-query.get-conversation-messages',
+        body,
+      );
+      return response;
+    } catch (error) {
+      throw new HttpException(
+        error?.message || 'Error getting conversation messages',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('create-conversation')
+  async createConversation(@Body() body: any) {
+    console.log('[QueryController] Create conversation request:', body);
+
+    try {
+      const response = await this.kafkaService.sendMessage(
+        'document-query.create-conversation',
+        body,
+      );
+      return response;
+    } catch (error) {
+      throw new HttpException(
+        error?.message || 'Error creating conversation',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }

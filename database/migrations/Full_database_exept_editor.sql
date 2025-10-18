@@ -486,20 +486,69 @@ ORDER BY ss.day_of_week, ss.start_time;
 -- Migration Complete
 -- ============================================
 
-CREATE TABLE document_query_prompt (
+-- ============================================
+-- Document Query & Chatbot System
+-- ============================================
+
+-- Enable pgvector extension for document embeddings
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Conversations table to track chat sessions
+CREATE TABLE document_conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  resource_id  UUID NOT NULL REFERENCES study_resources(id) ON DELETE CASCADE,
-  prompt JSONB NOT NULL,
+  thread_id UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+  title VARCHAR(255) DEFAULT 'New Conversation',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Individual messages in a conversation
+CREATE TABLE conversation_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES document_conversations(id) ON DELETE CASCADE,
+  role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE chatbot_response (
+-- Link messages to the documents they reference
+CREATE TABLE message_document_references (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  query_id UUID NOT NULL REFERENCES document_query_prompt(id) ON DELETE CASCADE,
-  response JSONB NOT NULL,
+  message_id UUID NOT NULL REFERENCES conversation_messages(id) ON DELETE CASCADE,
+  resource_id UUID NOT NULL REFERENCES thread_resources(id) ON DELETE CASCADE,
+  page_number INTEGER,
+  relevance_score DECIMAL(3,2),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Document embeddings for RAG
+CREATE TABLE document_embeddings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  resource_id UUID NOT NULL REFERENCES thread_resources(id) ON DELETE CASCADE,
+  chunk_index INTEGER NOT NULL,
+  chunk_text TEXT NOT NULL,
+  page_number INTEGER,
+  embedding vector(1536), -- OpenAI embedding dimension
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(resource_id, chunk_index)
+);
+
+-- Create index for vector similarity search
+CREATE INDEX IF NOT EXISTS document_embeddings_vector_idx 
+ON document_embeddings USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);
+
+-- Indexes for better performance
+CREATE INDEX idx_document_conversations_user ON document_conversations(user_id);
+CREATE INDEX idx_document_conversations_thread ON document_conversations(thread_id);
+CREATE INDEX idx_conversation_messages_conversation ON conversation_messages(conversation_id);
+CREATE INDEX idx_message_references_message ON message_document_references(message_id);
+CREATE INDEX idx_document_embeddings_resource ON document_embeddings(resource_id);
+
+-- Drop old tables
+DROP TABLE IF EXISTS chatbot_response CASCADE;
+DROP TABLE IF EXISTS document_query_prompt CASCADE;
 
 CREATE TABLE quizzes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,0 +1,30 @@
+# Lightweight Dockerfile without gcc dependencies
+# Use this if you're having network issues with apt-get
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    APP_HOME=/app
+
+# Create app directory
+WORKDIR $APP_HOME
+
+# Copy and install Python dependencies (using pre-built wheels)
+COPY python/document-query-service/requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir \
+    psycopg2-binary==2.9.9 \
+    && pip install --no-cache-dir -r requirements.txt
+
+# Copy ONLY the service code
+COPY python/document-query-service/app ./app
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Expose port
+EXPOSE 8000
+
+# Start service
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
