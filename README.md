@@ -25,36 +25,77 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
-## Project setup
+## Local Development
+
+### Backend (API & Services)
+
+1. **Start all backend services and dependencies using Docker Compose:**
 
 ```bash
-$ npm install
+docker-compose up -d
 ```
 
-## Compile and run the project
+This will start all microservices, databases, and dependencies in the background.
+
+2. **(Optional) Run a specific service locally (for debugging):**
+
+- Navigate to the service directory (e.g., `apps/api-gateway`)
+- Install dependencies:
+  ```bash
+  npm install
+  ```
+- Start the service:
+  ```bash
+  npm run start:dev
+  ```
+
+### Frontend
+
+See the [CollabLearn-Frontend/client/README.md](../CollabLearn-Frontend/client/README.md) for detailed frontend instructions.
+
+Quick start:
+
+1. Open a new terminal and navigate to the frontend directory:
 
 ```bash
-# development
-$ npm run start
+cd ../CollabLearn-Frontend/client
+```
 
-# watch mode
-$ npm run start:dev
+2. Install dependencies:
 
-# production mode
-$ npm run start:prod
+```bash
+npm install
+```
+
+3. Start the development server:
+
+```bash
+npm run dev
+```
+
+---
+
+## Compile and run the project (Individual Services)
+
+You can also run each NestJS service individually for development or debugging:
+
+```bash
+# From the service directory (e.g., apps/api-gateway)
+npm install
+npm run start:dev
 ```
 
 ## Run tests
 
 ```bash
 # unit tests
-$ npm run test
+npm run test
 
 # e2e tests
-$ npm run test:e2e
+npm run test:e2e
 
 # test coverage
-$ npm run test:cov
+npm run test:cov
 ```
 
 ## Deployment
