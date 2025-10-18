@@ -62,4 +62,28 @@ export class KafkaReplyController {
     console.log('[KafkaReplyController] Received study plan workspaces reply:', message);
     this.kafkaService.handleReply('study-plan-workspaces.reply', message, context);
   }
+
+  @MessagePattern('document-query.query-documents.reply')
+  handleQueryDocumentsReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received query documents reply:', message);
+    this.kafkaService.handleReply('document-query.query-documents.reply', message, context);
+  }
+
+  @MessagePattern('document-query.get-conversations.reply')
+  handleGetConversationsReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received get conversations reply:', message);
+    this.kafkaService.handleReply('document-query.get-conversations.reply', message, context);
+  }
+
+  @MessagePattern('document-query.get-conversation-messages.reply')
+  handleGetConversationMessagesReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received get conversation messages reply:', message);
+    this.kafkaService.handleReply('document-query.get-conversation-messages.reply', message, context);
+  }
+
+  @MessagePattern('document-query.create-conversation.reply')
+  handleCreateConversationReply(@Payload() message: any, @Ctx() context: KafkaContext) {
+    console.log('[KafkaReplyController] Received create conversation reply:', message);
+    this.kafkaService.handleReply('document-query.create-conversation.reply', message, context);
+  }
 }

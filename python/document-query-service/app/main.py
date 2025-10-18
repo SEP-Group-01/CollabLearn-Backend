@@ -18,7 +18,11 @@ TOPICS = [
     "document-query.chats",
     "document-query.search-documents",
     "document-query.get-document-summary", 
-    "document-query.documents"
+    "document-query.documents",
+    "document-query.query-documents",
+    "document-query.get-conversations",
+    "document-query.get-conversation-messages",
+    "document-query.create-conversation",
 ]
 GROUP_ID = "document-query-service"
 SERVICE_NAME = "DocumentQueryService"
