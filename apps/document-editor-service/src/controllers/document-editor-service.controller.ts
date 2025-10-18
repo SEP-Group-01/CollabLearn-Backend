@@ -202,4 +202,36 @@ export class DocumentEditorServiceController {
   async getDocumentsByThread(@Payload() data: { threadId: string; userId: string }) {
     return this.documentEditorServiceService.getDocumentsByThread(data.threadId, data.userId);
   }
+
+  // Document Access Requests
+  @MessagePattern('document.access.request')
+  async requestDocumentAccess(
+    @Payload() data: {
+      documentId: string;
+      userId: string;
+      requestedPermission: 'read' | 'write';
+      message?: string;
+    },
+  ) {
+    return this.documentEditorServiceService.requestDocumentAccess(data);
+  }
+
+  @MessagePattern('document.access.requests.pending')
+  async getPendingAccessRequests(@Payload() data: { threadId: string; userId: string }) {
+    return this.documentEditorServiceService.getPendingAccessRequests(data.threadId, data.userId);
+  }
+
+  @MessagePattern('document.access.request.approve')
+  async approveAccessRequest(
+    @Payload() data: { requestId: string; userId: string },
+  ) {
+    return this.documentEditorServiceService.approveAccessRequest(data.requestId, data.userId);
+  }
+
+  @MessagePattern('document.access.request.reject')
+  async rejectAccessRequest(
+    @Payload() data: { requestId: string; userId: string; rejectionReason?: string },
+  ) {
+    return this.documentEditorServiceService.rejectAccessRequest(data);
+  }
 }

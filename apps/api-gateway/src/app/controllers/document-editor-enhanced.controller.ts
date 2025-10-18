@@ -393,24 +393,111 @@ export class DocumentEditorController {
     @Headers('authorization') authHeader: string,
   ) {
     try {
-      // Validate token and get user information
-      const user = await this.validateAuthToken(authHeader);
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId || tokenValidation.id || tokenValidation.userId;
+      
+      if (!userId) {
+        console.error('❌ No user ID found in token validation:', tokenValidation);
+        throw new HttpException('User ID not found in token', HttpStatus.UNAUTHORIZED);
+      }
+      
+      console.log('📄 Fetching documents for thread:', threadId, 'user:', userId);
+      
+      const documents = await this.documentEditorService.send('document.getByThread', {
+        threadId,
+        userId: userId,
+      }).toPromise();
 
-      // Get documents for the thread with user permission info
-      const result = await firstValueFrom(
-        this.documentEditorService.send('document.getByThread', {
-          threadId,
-          userId: user.id
-        }).pipe(timeout(10000))
-      );
+      return documents;
+    } catch (error) {
+      console.error('❌ Error in getDocumentsByThread:', error);
+      throw error;
+    }
+  }
+
+  // Document Access Requests
+  @Post(':documentId/access-request')
+  async requestDocumentAccess(
+    @Param('documentId') documentId: string,
+    @Body() body: { requestedPermission: 'read' | 'write'; message?: string },
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+
+      const result = await this.documentEditorService.send('document.access.request', {
+        documentId,
+        userId: userId,
+        requestedPermission: body.requestedPermission,
+        message: body.message,
+      }).toPromise();
 
       return result;
     } catch (error) {
-      console.error('Error fetching documents by thread:', error);
-      throw new HttpException(
-        error.message || 'Failed to fetch documents',
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw error;
+    }
+  }
+
+  @Get('thread/:threadId/access-requests')
+  async getPendingAccessRequests(
+    @Param('threadId') threadId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+
+      const requests = await this.documentEditorService.send('document.access.requests.pending', {
+        threadId,
+        userId: userId,
+      }).toPromise();
+
+      return requests;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Post('access-requests/:requestId/approve')
+  async approveAccessRequest(
+    @Param('requestId') requestId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+
+      const result = await this.documentEditorService.send('document.access.request.approve', {
+        requestId,
+        userId: userId,
+      }).toPromise();
+
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Post('access-requests/:requestId/reject')
+  async rejectAccessRequest(
+    @Param('requestId') requestId: string,
+    @Body() body: { rejectionReason?: string },
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id || tokenValidation.user?.userId;
+
+      const result = await this.documentEditorService.send('document.access.request.reject', {
+        requestId,
+        userId: userId,
+        rejectionReason: body.rejectionReason,
+      }).toPromise();
+
+      return result;
+    } catch (error) {
+      throw error;
     }
   }
 }

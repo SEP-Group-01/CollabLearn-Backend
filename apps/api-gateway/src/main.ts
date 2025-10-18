@@ -35,6 +35,8 @@ async function bootstrap() {
     origin: [
       'http://localhost:5173',
       'http://localhost:3000',
+      'https://collab-learn-frontend-lw2za9epr-ramalthejitha20-4961s-projects.vercel.app',
+      /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel preview deployments
       configService.get('FRONTEND_URL'),
     ],
     credentials: true,
