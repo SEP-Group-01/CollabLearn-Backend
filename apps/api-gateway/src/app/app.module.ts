@@ -20,7 +20,6 @@ import {
 import { DocumentEditorGateway } from './gateways/document-editor.gateway';
 import { ForumGateway } from './gateways/forum.gateway';
 import { QuizGateway } from './gateways/quiz.gateway';
-import { StudyPlanService } from './services/study-plan.service';
 
 @Module({
   imports: [
@@ -121,7 +120,6 @@ import { StudyPlanService } from './services/study-plan.service';
   providers: [
     KafkaService,
     RedisBridgeService,
-    StudyPlanService,
     DocumentEditorGateway,
     ForumGateway,
     QuizGateway,
