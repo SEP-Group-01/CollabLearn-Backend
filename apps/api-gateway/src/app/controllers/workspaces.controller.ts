@@ -503,7 +503,7 @@ export class WorkspacesController {
       const tokenValidation = await this.validateAuthToken(authHeader);
       const result = await firstValueFrom(
         this.workspacesService.send(
-          { cmd: 'send-join-request' },
+          { cmd: 'request-workspace' },
           { userId: tokenValidation.user.id, workspaceId: body.workspaceId },
         ),
       );
