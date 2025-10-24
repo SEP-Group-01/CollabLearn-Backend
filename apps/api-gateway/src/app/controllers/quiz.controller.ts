@@ -3,13 +3,17 @@ import {
   Inject,
   Post,
   Get,
+  Delete,
   Query,
   Body,
   Param,
   HttpException,
   HttpStatus,
   Headers,
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 
@@ -930,18 +934,28 @@ export class ThreadQuizController {
 
   // POST /api/threads/:threadId/quizzes/create - Alternative endpoint for frontend compatibility
   @Post(':threadId/quizzes/create')
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'questionImages', maxCount: 50 },
+    { name: 'optionImages', maxCount: 200 },
+  ]))
   async createQuizInThreadWithCreate(
     @Param('threadId') threadId: string,
     @Headers('authorization') authorizationHeader: string,
     @Body()
     body: {
-      title: string;
-      description: string;
-      timeAllocated: number;
-      questions: any[];
+      quizData: string; // JSON stringified quiz data
+      workspaceId?: string;
+    },
+    @UploadedFiles() files: {
+      questionImages?: Express.Multer.File[];
+      optionImages?: Express.Multer.File[];
     },
   ) {
-    console.log('Creating quiz in thread (with /create):', threadId, body);
+    console.log('[ThreadQuizController.createQuizInThreadWithCreate] Creating quiz in thread:', threadId);
+    console.log('[ThreadQuizController.createQuizInThreadWithCreate] Files received:', {
+      questionImages: files?.questionImages?.length || 0,
+      optionImages: files?.optionImages?.length || 0,
+    });
 
     try {
       const authResult = await this.validateAuthToken(authorizationHeader);
@@ -954,6 +968,17 @@ export class ThreadQuizController {
 
       const userId =
         authResult.user.id || authResult.user.userId || authResult.user.sub;
+
+      // Parse the quiz data from the stringified JSON
+      let quizData;
+      try {
+        quizData = JSON.parse(body.quizData);
+      } catch (error) {
+        throw new HttpException(
+          'Invalid quiz data format',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
 
       // Check if user has admin or moderator permissions for this thread
       console.log('[ThreadQuizController.createQuizInThreadWithCreate] Checking permissions for user:', userId, 'thread:', threadId);
@@ -974,16 +999,77 @@ export class ThreadQuizController {
         );
       }
 
+      const workspaceId = body.workspaceId || permissionResult.workspaceId;
+
+      // Get image mapping from quiz data
+      const imageMapping = quizData.imageMapping || { questions: {}, options: {} };
+
+      // Prepare image files data to send to quiz service
+      const imageFilesData: any = {
+        questionImages: {},
+        optionImages: {},
+      };
+
+      // Process question images using the mapping
+      if (files?.questionImages && files.questionImages.length > 0) {
+        // Create reverse mapping: index -> questionId
+        const indexToQuestionId: Record<number, string> = {};
+        for (const [questionId, index] of Object.entries(imageMapping.questions)) {
+          indexToQuestionId[index as number] = questionId;
+        }
+        
+        files.questionImages.forEach((file, index) => {
+          const questionId = indexToQuestionId[index];
+          if (questionId) {
+            imageFilesData.questionImages[questionId] = {
+              buffer: file.buffer.toString('base64'), // Convert buffer to base64 for TCP transmission
+              mimeType: file.mimetype,
+              size: file.size,
+              originalName: file.originalname,
+            };
+          }
+        });
+      }
+
+      // Process option images using the mapping
+      if (files?.optionImages && files.optionImages.length > 0) {
+        // Create reverse mapping: index -> optionId
+        const indexToOptionId: Record<number, string> = {};
+        for (const [optionId, index] of Object.entries(imageMapping.options)) {
+          indexToOptionId[index as number] = optionId;
+        }
+        
+        files.optionImages.forEach((file, index) => {
+          const optionId = indexToOptionId[index];
+          if (optionId) {
+            imageFilesData.optionImages[optionId] = {
+              buffer: file.buffer.toString('base64'), // Convert buffer to base64 for TCP transmission
+              mimeType: file.mimetype,
+              size: file.size,
+              originalName: file.originalname,
+            };
+          }
+        });
+      }
+
       const createQuizData = {
         createQuizDto: {
-          title: body.title,
-          description: body.description,
-          timeAllocated: body.timeAllocated,
-          questions: body.questions || [],
+          title: quizData.title,
+          description: quizData.description,
+          timeAllocated: quizData.timeAllocated,
+          questions: quizData.questions || [],
+          selectedResources: quizData.selectedResources || [],
+          workspaceId: workspaceId,
         },
         userId,
         threadId,
+        workspaceId,
+        imageFiles: imageFilesData,
       };
+
+      console.log('[ThreadQuizController.createQuizInThreadWithCreate] Sending to quiz service with', 
+        Object.keys(imageFilesData.questionImages).length, 'question images and',
+        Object.keys(imageFilesData.optionImages).length, 'option images');
 
       const result = await firstValueFrom(
         this.quizService.send({ cmd: 'create_quiz' }, createQuizData),
@@ -995,7 +1081,7 @@ export class ThreadQuizController {
         message: 'Quiz created successfully in thread',
       };
     } catch (error) {
-      console.error('Error creating quiz in thread (with /create):', error);
+      console.error('[ThreadQuizController.createQuizInThreadWithCreate] Error creating quiz in thread:', error);
       if (error instanceof HttpException) {
         throw error;
       }
@@ -1034,6 +1120,80 @@ export class ThreadQuizController {
       }
       throw new HttpException(
         error?.message || 'Failed to fetch thread resources',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // DELETE /api/threads/:threadId/quizzes/:quizId - Delete a quiz
+  @Delete(':threadId/quizzes/:quizId')
+  async deleteQuiz(
+    @Param('threadId') threadId: string,
+    @Param('quizId') quizId: string,
+    @Headers('authorization') authorizationHeader: string,
+    @Body() body: { workspaceId: string },
+  ) {
+    console.log('[ThreadQuizController.deleteQuiz] Deleting quiz:', quizId, 'from thread:', threadId);
+
+    try {
+      const authResult = await this.validateAuthToken(authorizationHeader);
+      if (!authResult?.success) {
+        throw new HttpException(
+          'Invalid or expired token',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      const userId =
+        authResult.user.id || authResult.user.userId || authResult.user.sub;
+
+      // Check if user has admin or moderator permissions for this thread
+      console.log('[ThreadQuizController.deleteQuiz] Checking permissions for user:', userId, 'thread:', threadId);
+      
+      const permissionResult = await firstValueFrom(
+        this.quizService.send(
+          { cmd: 'check-admin-or-moderator' },
+          { userId, threadId },
+        ),
+      );
+
+      console.log('[ThreadQuizController.deleteQuiz] Permission check result:', permissionResult);
+
+      if (!permissionResult?.success) {
+        throw new HttpException(
+          'Permission denied. Only workspace admins and thread moderators can delete quizzes.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      const workspaceId = body.workspaceId || permissionResult.workspaceId;
+
+      if (!workspaceId) {
+        throw new HttpException(
+          'Workspace ID is required for quiz deletion',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const result = await firstValueFrom(
+        this.quizService.send(
+          { cmd: 'delete_quiz' },
+          { quizId, userId, threadId, workspaceId },
+        ),
+      );
+
+      return {
+        success: true,
+        message: 'Quiz deleted successfully',
+        ...result,
+      };
+    } catch (error) {
+      console.error('[ThreadQuizController.deleteQuiz] Error deleting quiz:', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        error?.message || 'Failed to delete quiz',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

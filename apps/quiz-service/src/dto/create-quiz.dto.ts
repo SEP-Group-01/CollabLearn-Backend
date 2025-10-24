@@ -13,7 +13,11 @@ class QuizQuestionOptionDto {
 
   @IsOptional()
   @IsString()
-  image?: string;
+  image?: string; // This will be the Firebase URL after upload
+
+  @IsOptional()
+  @IsString()
+  optionId?: string; // Frontend-generated temporary ID for mapping
 
   @IsOptional()
   isCorrect?: boolean;
@@ -25,7 +29,11 @@ class QuizQuestionDto {
 
   @IsOptional()
   @IsString()
-  image?: string;
+  image?: string; // This will be the Firebase URL after upload
+
+  @IsOptional()
+  @IsString()
+  questionId?: string; // Frontend-generated temporary ID for mapping
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -65,4 +73,9 @@ export class CreateQuizDto {
   @IsArray()
   @IsString({ each: true })
   selectedResources?: string[];
+
+  @IsOptional()
+  @IsString()
+  workspaceId?: string; // Needed for Firebase storage paths
 }
+

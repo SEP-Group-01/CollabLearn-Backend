@@ -9,14 +9,18 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { CreateQuizDto } from './dto/create-quiz.dto';
-import { AttemptQuizDto } from './dto/attempt-quiz.dto';
-import { StartQuizDto } from './dto/start-quiz.dto';
+import { CreateQuizDto } from '../dto/create-quiz.dto';
+import { AttemptQuizDto } from '../dto/attempt-quiz.dto';
+import { StartQuizDto } from '../dto/start-quiz.dto';
 import { SupabaseService } from './supabase.service';
+import { FirebaseService } from './firebase.service';
 
 @Injectable()
 export class QuizService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly firebaseService: FirebaseService,
+  ) {}
 
   // Helper method to format milliseconds to PostgreSQL INTERVAL format
   private formatTimeInterval(milliseconds: number): string {
@@ -112,6 +116,11 @@ export class QuizService {
     createQuizDto: CreateQuizDto,
     userId: string,
     threadId: string,
+    workspaceId?: string,
+    imageFiles?: {
+      questionImages?: Record<string, { buffer: string; mimeType: string; size: number }>;
+      optionImages?: Record<string, { buffer: string; mimeType: string; size: number }>;
+    },
   ) {
     const supabase = this.supabaseService.getClient();
 
@@ -119,6 +128,10 @@ export class QuizService {
       createQuizDto,
       userId,
       threadId,
+      workspaceId,
+      hasImageFiles: !!imageFiles,
+      questionImageCount: imageFiles?.questionImages ? Object.keys(imageFiles.questionImages).length : 0,
+      optionImageCount: imageFiles?.optionImages ? Object.keys(imageFiles.optionImages).length : 0,
     });
 
     // Note: Permission checks are handled at the API Gateway level
@@ -179,8 +192,23 @@ export class QuizService {
       }
     }
 
+    // Get workspace ID from thread if not provided
+    let resolvedWorkspaceId = workspaceId || createQuizDto.workspaceId;
+    if (!resolvedWorkspaceId) {
+      const { data: threadData } = await supabase
+        .from('threads')
+        .select('workspace_id')
+        .eq('id', threadId)
+        .single();
+      
+      resolvedWorkspaceId = threadData?.workspace_id;
+    }
+
     // Insert questions and options
     for (const questionDto of createQuizDto.questions) {
+      // Upload question image if provided
+      let questionImageUrl = questionDto.image;
+      
       // Insert question into the new `questions` table.
       // The DB column is named `question` in the target schema, so we map questionText -> question
       const { data: question, error: questionError } = await supabase
@@ -188,7 +216,7 @@ export class QuizService {
         .insert({
           quiz_id: quiz.id,
           question: questionDto.questionText,
-          attachment_url: questionDto.image ?? null,
+          attachment_url: questionImageUrl ?? null,
           marks: questionDto.marks,
         })
         .select()
@@ -198,22 +226,86 @@ export class QuizService {
         throw new Error(`Failed to create question: ${questionError.message}`);
       }
 
+      // Now upload the actual image if we have a file for this question
+      if (imageFiles?.questionImages && questionDto.questionId && resolvedWorkspaceId) {
+        const imageData = imageFiles.questionImages[questionDto.questionId];
+        if (imageData) {
+          try {
+            // Convert base64 buffer back to Buffer
+            const imageBuffer = Buffer.from(imageData.buffer, 'base64');
+            this.firebaseService.validateImageFile(imageData.mimeType, imageBuffer.length);
+            questionImageUrl = await this.firebaseService.uploadQuestionImage(
+              resolvedWorkspaceId,
+              threadId,
+              quiz.id,
+              question.id,
+              imageBuffer,
+              imageData.mimeType,
+            );
+
+            // Update the question with the actual Firebase URL
+            await supabase
+              .from('questions')
+              .update({ attachment_url: questionImageUrl })
+              .eq('id', question.id);
+          } catch (error) {
+            console.error(`Failed to upload question image:`, error);
+            // Continue even if image upload fails
+          }
+        }
+      }
+
       // Insert options into answer_option table
       for (let i = 0; i < (questionDto.options || []).length; i++) {
         const optionDto = questionDto.options[i];
         const sequenceLetter = String.fromCharCode(97 + i); // 'a', 'b', 'c', etc.
-        const { error: optionError } = await supabase
+        
+        let optionImageUrl = optionDto.image;
+
+        const { data: option, error: optionError } = await supabase
           .from('answer_option')
           .insert({
             question_id: question.id,
             answer_sequence_letter: sequenceLetter,
             answer: optionDto.text,
-            image_url: optionDto.image,
+            image_url: optionImageUrl,
             is_correct: optionDto.isCorrect || false,
-          });
+          })
+          .select()
+          .single();
 
         if (optionError) {
           throw new Error(`Failed to create option: ${optionError.message}`);
+        }
+
+        // Now upload the actual image if we have a file for this option
+        if (imageFiles?.optionImages && optionDto.optionId && option && resolvedWorkspaceId) {
+          const imageData = imageFiles.optionImages[optionDto.optionId];
+          if (imageData) {
+            try {
+              // Convert base64 buffer back to Buffer
+              const imageBuffer = Buffer.from(imageData.buffer, 'base64');
+              this.firebaseService.validateImageFile(imageData.mimeType, imageBuffer.length);
+              optionImageUrl = await this.firebaseService.uploadOptionImage(
+                resolvedWorkspaceId,
+                threadId,
+                quiz.id,
+                question.id,
+                option.id,
+                imageBuffer,
+                imageData.mimeType,
+              );
+
+              // Update the option with the actual Firebase URL
+              await supabase
+                .from('answer_option')
+                .update({ image_url: optionImageUrl })
+                .eq('id', option.id);
+            } catch (error) {
+              console.error(`Failed to upload option image:`, error);
+              // Continue even if image upload fails
+            }
+          }
         }
       }
     }
@@ -427,6 +519,7 @@ export class QuizService {
     }
 
     // Normalize shape to previous API (quiz_questions with question_text)
+    // NOTE: is_correct is intentionally excluded from frontend response for security
     const normalizedQuestions = (quiz.questions || []).map((qq: any) => ({
       id: qq.id,
       question_text: qq.question ?? qq.question_text,
@@ -436,7 +529,6 @@ export class QuizService {
         id: opt.id,
         text: opt.answer,
         image: opt.image_url,
-        is_correct: opt.is_correct,
         sequence_letter: opt.answer_sequence_letter,
       })),
     }));
@@ -713,6 +805,50 @@ export class QuizService {
       // Get quiz details for resume
       const quiz = await this.getQuiz(quizId);
 
+      // Fetch user's saved answers for this attempt
+      const { data: userAnswers, error: answersError } = await supabase
+        .from('user_answer')
+        .select('question_id, answer')
+        .eq('attempt_id', attempt.id);
+
+      if (answersError) {
+        console.error('[getActiveAttempt] Error fetching user answers:', answersError);
+      }
+
+      console.log('[getActiveAttempt] User answers from DB:', userAnswers);
+      console.log('[getActiveAttempt] Number of saved answers:', userAnswers?.length || 0);
+
+      // Transform user answers to frontend format
+      // Answer is stored as comma-separated string like "a,b,c"
+      // Need to convert to option IDs array
+      const savedAnswers: { [questionId: string]: string[] } = {};
+      
+      if (userAnswers && userAnswers.length > 0) {
+        for (const userAnswer of userAnswers) {
+          const questionId = userAnswer.question_id;
+          const answerString = userAnswer.answer; // "a,b,c"
+          
+          // Find the question to get its options
+          const question = quiz.quiz_questions?.find(q => q.id === questionId);
+          if (question && answerString) {
+            // Split the answer string to get sequence letters
+            const sequenceLetters = answerString.split(',').filter(l => l && l.trim());
+            
+            // Convert sequence letters to option IDs
+            const optionIds = sequenceLetters.map(letter => {
+              const option = question.quiz_options?.find(opt => opt.sequence_letter === letter.trim());
+              return option?.id;
+            }).filter(Boolean); // Remove undefined values
+            
+            if (optionIds.length > 0) {
+              savedAnswers[questionId] = optionIds;
+            }
+          }
+        }
+      }
+
+      console.log('[getActiveAttempt] Transformed saved answers:', savedAnswers);
+
       return {
         attemptId: attempt.id,
         startedAt: attempt.created_at,
@@ -720,6 +856,7 @@ export class QuizService {
         timeRemaining,
         timeAllocated: quiz.allocated_time,
         status: 'active',
+        savedAnswers, // Include saved answers for resume
         quiz: {
           id: quiz.id,
           title: quiz.title,
@@ -1149,6 +1286,292 @@ export class QuizService {
       return resources || [];
     } catch (error) {
       console.error('Error fetching thread resources:', error);
+      throw error;
+    }
+  }
+
+  async deleteQuiz(quizId: string, userId: string, threadId: string, workspaceId: string) {
+    const supabase = this.supabaseService.getClient();
+
+    console.log('[deleteQuiz] Starting quiz deletion:', { quizId, userId, threadId, workspaceId });
+
+    try {
+      // Check if user has permission (admin or moderator)
+      const permissionCheck = await this.checkAdminOrModerator(threadId, userId);
+      
+      if (!permissionCheck?.success) {
+        throw new Error('Permission denied. Only workspace admins and thread moderators can delete quizzes.');
+      }
+
+      // Get quiz details before deletion
+      const { data: quiz, error: quizFetchError } = await supabase
+        .from('quizzes')
+        .select('id, title, thread_id')
+        .eq('id', quizId)
+        .single();
+
+      if (quizFetchError || !quiz) {
+        throw new Error(`Quiz not found: ${quizFetchError?.message || 'Unknown error'}`);
+      }
+
+      // Verify the quiz belongs to the specified thread
+      if (quiz.thread_id !== threadId) {
+        throw new Error('Quiz does not belong to the specified thread');
+      }
+
+      // Delete quiz from database (CASCADE will handle related records)
+      const { error: deleteError } = await supabase
+        .from('quizzes')
+        .delete()
+        .eq('id', quizId);
+
+      if (deleteError) {
+        throw new Error(`Failed to delete quiz from database: ${deleteError.message}`);
+      }
+
+      console.log('[deleteQuiz] Quiz deleted from database, now cleaning up Firebase images');
+
+      // Delete all related images from Firebase Storage
+      try {
+        await this.firebaseService.deleteQuizImages(workspaceId, threadId, quizId);
+        console.log('[deleteQuiz] Firebase images deleted successfully');
+      } catch (firebaseError) {
+        console.error('[deleteQuiz] Failed to delete Firebase images:', firebaseError);
+        // Don't fail the entire operation if Firebase cleanup fails
+        // The quiz is already deleted from the database
+      }
+
+      return {
+        success: true,
+        message: 'Quiz and associated images deleted successfully',
+        quizId: quizId,
+      };
+    } catch (error) {
+      console.error('[deleteQuiz] Error during quiz deletion:', error);
+      throw error;
+    }
+  }
+
+  // Real-time answer submission method
+  async submitAnswer(submitAnswerDto: {
+    attemptId: string;
+    userId: string;
+    questionId: string;
+    selectedOptions: string[];
+  }) {
+    const supabase = this.supabaseService.getClient();
+
+    console.log('[submitAnswer] Submitting answer in real-time:', submitAnswerDto);
+
+    try {
+      // Verify the attempt exists and belongs to the user
+      const { data: attempt, error: attemptError } = await supabase
+        .from('quiz_attempt')
+        .select('*')
+        .eq('id', submitAnswerDto.attemptId)
+        .eq('user_id', submitAnswerDto.userId)
+        .eq('completed', false)
+        .single();
+
+      if (attemptError || !attempt) {
+        throw new Error('Invalid or completed attempt');
+      }
+
+      // Check if attempt has expired
+      const now = new Date();
+      const expiresAt = new Date(attempt.expires_at);
+      if (now > expiresAt) {
+        throw new Error('Attempt has expired');
+      }
+
+      // Delete any existing answer for this question in this attempt
+      await supabase
+        .from('user_answer')
+        .delete()
+        .eq('attempt_id', submitAnswerDto.attemptId)
+        .eq('question_id', submitAnswerDto.questionId);
+
+      // Convert array to comma-separated string (database expects format: "a,b,c")
+      const answerString = submitAnswerDto.selectedOptions.join(',');
+
+      // Insert new answer
+      const { error: insertError } = await supabase
+        .from('user_answer')
+        .insert({
+          attempt_id: submitAnswerDto.attemptId,
+          question_id: submitAnswerDto.questionId,
+          answer: answerString,
+        });
+
+      if (insertError) {
+        console.error('[submitAnswer] Error inserting answer:', insertError);
+        throw new Error('Failed to save answer');
+      }
+
+      console.log('[submitAnswer] Answer saved successfully');
+
+      return {
+        success: true,
+        message: 'Answer saved',
+      };
+    } catch (error) {
+      console.error('[submitAnswer] Error:', error);
+      throw error;
+    }
+  }
+
+  // Auto-submit quiz when time expires
+  async autoSubmitQuiz(attemptId: string, userId: string) {
+    const supabase = this.supabaseService.getClient();
+
+    console.log('[autoSubmitQuiz] Auto-submitting quiz:', { attemptId, userId });
+
+    try {
+      // Get the attempt
+      const { data: attempt, error: attemptError } = await supabase
+        .from('quiz_attempt')
+        .select('*, quizzes(*)')
+        .eq('id', attemptId)
+        .eq('user_id', userId)
+        .single();
+
+      if (attemptError || !attempt) {
+        throw new Error('Attempt not found');
+      }
+
+      // If already completed, return
+      if (attempt.completed) {
+        return {
+          success: true,
+          message: 'Attempt already completed',
+          alreadyCompleted: true,
+        };
+      }
+
+      // Get all user answers for this attempt
+      const { data: userAnswers, error: answersError } = await supabase
+        .from('user_answer')
+        .select('*')
+        .eq('attempt_id', attemptId);
+
+      if (answersError) {
+        console.error('[autoSubmitQuiz] Error fetching answers:', answersError);
+      }
+
+      // Calculate time taken
+      const startedAt = new Date(attempt.started_at);
+      const now = new Date();
+      const timeTakenMs = now.getTime() - startedAt.getTime();
+      const timeTaken = this.formatTimeInterval(timeTakenMs);
+
+      // Grade the quiz
+      const { data: questions, error: questionsError } = await supabase
+        .from('questions')
+        .select(`
+          id,
+          marks,
+          answer_option (
+            id,
+            is_correct
+          )
+        `)
+        .eq('quiz_id', attempt.quiz_id);
+
+      if (questionsError) {
+        throw new Error('Failed to fetch questions');
+      }
+
+      let marksObtained = 0;
+      const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+
+      // Grade each answer
+      for (const question of questions) {
+        const correctOptions = question.answer_option
+          .filter((opt: any) => opt.is_correct);
+        
+        const correctLetters = correctOptions
+          .map((opt: any) => opt.answer_sequence_letter)
+          .filter(letter => letter && letter.trim() !== '')
+          .sort();
+
+        const userAnswer = userAnswers?.find(
+          (ans) => ans.question_id === question.id,
+        );
+
+        if (userAnswer && userAnswer.answer) {
+          // Answer is stored as comma-separated string like "a,b,c"
+          const selectedLetters = userAnswer.answer
+            .split(',')
+            .filter(letter => letter && letter.trim() !== '')
+            .sort();
+
+          console.log('[autoSubmitQuiz] Question:', question.id, 'Correct:', correctLetters, 'Selected:', selectedLetters);
+
+          // Calculate weighted scoring (same logic as attemptQuiz)
+          let questionScore = 0;
+          const totalCorrectAnswers = correctLetters.length;
+          const totalUserAnswers = selectedLetters.length;
+
+          if (totalUserAnswers === 0 || totalCorrectAnswers === 0) {
+            questionScore = 0;
+          } else {
+            const correctSelections = selectedLetters.filter(letter => 
+              correctLetters.includes(letter)
+            ).length;
+            
+            const wrongSelections = selectedLetters.filter(letter => 
+              !correctLetters.includes(letter)
+            ).length;
+
+            if (wrongSelections === 0 && correctSelections === totalCorrectAnswers) {
+              // Perfect answer
+              questionScore = question.marks;
+            } else if (correctSelections === 0) {
+              questionScore = 0;
+            } else {
+              // Weighted scoring with penalty
+              const positiveScore = (correctSelections / totalCorrectAnswers) * question.marks;
+              const penaltyRatio = wrongSelections / (totalCorrectAnswers + wrongSelections);
+              const penalty = positiveScore * penaltyRatio;
+              questionScore = Math.max(0, positiveScore - penalty);
+            }
+          }
+
+          marksObtained += questionScore;
+          console.log('[autoSubmitQuiz] Question score:', questionScore);
+        }
+      }
+
+      // Update attempt as completed
+      const { data: updatedAttempt, error: updateError } = await supabase
+        .from('quiz_attempt')
+        .update({
+          completed: true,
+          time_taken: timeTaken,
+          marks_obtained: marksObtained,
+          completed_at: now.toISOString(),
+        })
+        .eq('id', attemptId)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new Error('Failed to update attempt');
+      }
+
+      console.log('[autoSubmitQuiz] Quiz auto-submitted successfully');
+
+      return {
+        success: true,
+        attempt: updatedAttempt,
+        marksObtained,
+        totalMarks,
+        percentage:
+          totalMarks > 0 ? Math.round((marksObtained / totalMarks) * 100) : 0,
+        autoSubmitted: true,
+      };
+    } catch (error) {
+      console.error('[autoSubmitQuiz] Error:', error);
       throw error;
     }
   }

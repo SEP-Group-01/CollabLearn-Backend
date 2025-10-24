@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Controller, UseFilters } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { QuizService } from './quiz-service.service';
-import { CreateQuizDto } from './dto/create-quiz.dto';
-import { AttemptQuizDto } from './dto/attempt-quiz.dto';
-import { StartQuizDto } from './dto/start-quiz.dto';
-import { AllExceptionsFilter } from './strategies/all-exceptions.filter';
+import { QuizService } from '../services/quiz-service.service';
+import { CreateQuizDto } from '../dto/create-quiz.dto';
+import { AttemptQuizDto } from '../dto/attempt-quiz.dto';
+import { StartQuizDto } from '../dto/start-quiz.dto';
+import { AllExceptionsFilter } from '../strategies/all-exceptions.filter';
 
 @Controller()
 @UseFilters(AllExceptionsFilter)
@@ -19,12 +19,19 @@ export class QuizServiceController {
       createQuizDto: CreateQuizDto;
       userId: string;
       threadId: string;
+      workspaceId?: string;
+      imageFiles?: {
+        questionImages?: Record<string, { buffer: string; mimeType: string; size: number; originalName: string }>;
+        optionImages?: Record<string, { buffer: string; mimeType: string; size: number; originalName: string }>;
+      };
     },
   ) {
     return this.quizService.createQuiz(
       data.createQuizDto,
       data.userId,
       data.threadId,
+      data.workspaceId,
+      data.imageFiles,
     );
   }
 
@@ -86,5 +93,44 @@ export class QuizServiceController {
   @MessagePattern({ cmd: 'get_thread_resources' })
   async getThreadResources(@Payload() data: { threadId: string }) {
     return this.quizService.getThreadResources(data.threadId);
+  }
+
+  @MessagePattern({ cmd: 'delete_quiz' })
+  async deleteQuiz(
+    @Payload() data: {
+      quizId: string;
+      userId: string;
+      threadId: string;
+      workspaceId: string;
+    },
+  ) {
+    return this.quizService.deleteQuiz(
+      data.quizId,
+      data.userId,
+      data.threadId,
+      data.workspaceId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'submit_answer' })
+  async submitAnswer(
+    @Payload() data: {
+      attemptId: string;
+      userId: string;
+      questionId: string;
+      selectedOptions: string[];
+    },
+  ) {
+    return this.quizService.submitAnswer(data);
+  }
+
+  @MessagePattern({ cmd: 'auto_submit_quiz' })
+  async autoSubmitQuiz(
+    @Payload() data: {
+      attemptId: string;
+      userId: string;
+    },
+  ) {
+    return this.quizService.autoSubmitQuiz(data.attemptId, data.userId);
   }
 }
