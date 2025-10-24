@@ -142,6 +142,50 @@ export class WorkspacesController {
     }
   }
 
+  // Get user's workspaces (authenticated endpoint)
+  @Get('my')
+  async getMyWorkspaces(
+    @Headers('authorization') authHeader: string,
+  ) {
+    try {
+      console.log('🔍 [Gateway] Getting user workspaces');
+      
+      // Validate token and get user information
+      const tokenValidation = await this.validateAuthToken(authHeader);
+      const userId = tokenValidation.user?.id;
+
+      if (!userId) {
+        throw new HttpException(
+          'User ID not found in token',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      console.log('🔍 [Gateway] Fetching workspaces for user:', userId);
+
+      const result = await firstValueFrom(
+        this.workspacesService.send(
+          { cmd: 'get-workspaces-by-user-id' },
+          { userId },
+        ).pipe(timeout(10000)),
+      );
+
+      console.log('✅ [Gateway] Successfully retrieved user workspaces');
+      return result;
+    } catch (error: any) {
+      console.error('❌ [Gateway] Error getting user workspaces:', error);
+      
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        error.message || 'Failed to retrieve your workspaces',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // Check if user is admin or moderator for a thread
   @Get('check-admin-moderator/:threadId')
   async checkAdminOrModerator(

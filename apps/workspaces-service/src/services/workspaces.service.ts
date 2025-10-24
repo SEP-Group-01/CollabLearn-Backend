@@ -327,16 +327,30 @@ export class WorkspacesService {
             return null;
           }
 
-          return workspace;
+          // Fetch tags for this workspace
+          const workspaceTags = await this.getWorkspaceTags(workspace.id);
+
+          // Get members count
+          const membersCount = await this.getWorkspaceMembersCount(workspace.id);
+
+          // Return workspace with additional fields
+          return {
+            ...workspace,
+            tags: workspaceTags,
+            members_count: membersCount,
+          };
         }),
       );
 
+      // Filter out any null workspaces
+      const validWorkspaces = workspaces.filter((ws) => ws !== null);
+
       console.log(
         '✅ [WorkspaceService] getWorkspacesByUserId successful, found',
-        workspaces?.length || 0,
+        validWorkspaces.length,
         'workspaces',
       );
-      return workspaces;
+      return validWorkspaces;
     } catch (error) {
       console.error(
         '❌ [WorkspaceService] Error fetching workspaces by user ID:',
