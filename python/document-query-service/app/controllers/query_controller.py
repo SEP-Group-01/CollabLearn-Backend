@@ -4,6 +4,7 @@ Handles all document-query related business logic with RAG capabilities
 """
 from typing import List, Dict, Optional
 import os
+import traceback
 from app.services.openai_service import OpenAIService
 from app.services import database_service as db
 from app.services.document_processor import DocumentProcessor
@@ -217,14 +218,16 @@ class QueryController:
                         print(f"[{self.service_name}] Document {doc_id} not found")
                         continue
                     
-                    firebase_path = doc_info.get('firebase_path')
-                    if not firebase_path:
-                        print(f"[{self.service_name}] No firebase_path for document {doc_id}")
+                    firebase_url = doc_info.get('firebase_url')
+                    if not firebase_url:
+                        print(f"[{self.service_name}] No firebase_url for document {doc_id}")
                         continue
                     
+                    mime_type = doc_info.get('mime_type', 'application/pdf')
+                    
                     # Download and extract text
-                    print(f"[{self.service_name}] Processing PDF from Firebase...")
-                    chunks = await self.document_processor.download_and_chunk_document(firebase_path)
+                    print(f"[{self.service_name}] Processing document from Firebase...")
+                    chunks = await self.doc_processor.process_document(firebase_url, mime_type)
                     if not chunks:
                         print(f"[{self.service_name}] No chunks extracted from document {doc_id}")
                         continue

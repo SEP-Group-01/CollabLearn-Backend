@@ -162,16 +162,14 @@ export class DatabaseService {
   }
 
   async getDocumentsByThread(threadId: string, userId: string): Promise<Document[]> {
+    // Return all documents in the thread (no permission filtering)
+    // This allows all users to access all shared documents in a thread
     const { data: documents, error } = await this.supabase
       .from('documents')
-      .select(`
-        *,
-        document_permissions!inner(permission_level)
-      `)
+      .select('*')
       .eq('thread_id', threadId)
       .eq('is_deleted', false)
-      .eq('document_permissions.user_id', userId)
-      .eq('document_permissions.is_active', true);
+      .order('updated_at', { ascending: false });
 
     if (error) {
       this.logger.error('Failed to get thread documents:', error);
